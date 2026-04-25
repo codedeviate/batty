@@ -321,10 +321,11 @@ fn snip_marks_clipped_line_range() {
 }
 
 #[test]
-fn rhai_range_bitwise_and_nested_comments_render() {
-    // Ensures the grammar still parses (and produces ANSI) when the source
-    // exercises the v0.4.0 grammar additions: range/bitwise ops + nested
-    // block comments. Failure mode would be syntect's runtime parser error.
+fn rhai_grammar_full_coverage() {
+    // Exercises the full v0.4.x Rhai grammar: range/bitwise/nested comments
+    // (0.4.0) plus template strings, map literals, ?? / ?., :: accessor,
+    // leading-dot floats, and new builtins (0.4.1). Failure mode would be
+    // syntect's runtime parser error or a content-survival assertion miss.
     let dir = tempfile::tempdir().unwrap();
     let f = dir.path().join("t.rhai");
     std::fs::write(
@@ -333,7 +334,14 @@ fn rhai_range_bitwise_and_nested_comments_render() {
          let m = a & b | c ^ d;\n\
          let s = x << 2 | y >> 1;\n\
          /* outer /* inner */ outer */\n\
-         fn x() {}\n",
+         let name = `Hello, ${user.name ?? \"world\"}!`;\n\
+         let map = #{ key: 1, nested: #{ inner: 2 } };\n\
+         let safe = obj?.field ?? default;\n\
+         let pi = .14159;\n\
+         let q = math::sqrt(2.0);\n\
+         let f = Fn(\"name\");\n\
+         let n = parse_int(\"42\");\n\
+         fn double(x) { x * 2 }\n",
     )
     .unwrap();
     let out = batty()
@@ -369,6 +377,14 @@ fn rhai_range_bitwise_and_nested_comments_render() {
     };
     assert!(stripped.contains("1..=10"), "stripped: {:?}", stripped);
     assert!(stripped.contains("inner"), "stripped: {:?}", stripped);
+    // 0.4.1 additions:
+    assert!(stripped.contains("Hello, ${"), "template string survived: {:?}", stripped);
+    assert!(stripped.contains("#{ key: 1"), "map literal survived: {:?}", stripped);
+    assert!(stripped.contains("obj?.field ?? default"), "?? / ?. ops: {:?}", stripped);
+    assert!(stripped.contains(".14159"), "leading-dot float: {:?}", stripped);
+    assert!(stripped.contains("math::sqrt"), ":: accessor: {:?}", stripped);
+    assert!(stripped.contains("Fn("), "Fn builtin: {:?}", stripped);
+    assert!(stripped.contains("parse_int"), "parse_int builtin: {:?}", stripped);
 }
 
 #[test]
