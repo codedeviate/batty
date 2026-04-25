@@ -1,8 +1,12 @@
 use std::fs;
 use std::path::PathBuf;
 
+/// Resolve the config file path. We always use `~/.config/batty/config`
+/// (XDG-style) on every platform — including macOS, where `dirs::config_dir()`
+/// would return `~/Library/Application Support`. This matches bat's behavior
+/// and gives users a single, predictable location.
 pub fn config_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|d| d.join("batty").join("config"))
+    dirs::home_dir().map(|h| h.join(".config").join("batty").join("config"))
 }
 
 /// Load config args from a specific file path. Returns empty Vec if file is absent.
