@@ -214,9 +214,18 @@ fn render_frame(
     let pad = term_w.saturating_sub(status_truncated.chars().count());
 
     // Atomic-ish write: clear screen, move to (0,0), write body, then status bar.
+    // In raw mode, '\n' only moves the cursor down without returning to column 0,
+    // which causes a staircase. Translate '\n' → '\r\n' so each line starts fresh.
+    let mut crlf_buf: Vec<u8> = Vec::with_capacity(buf.len() + 64);
+    for &b in &buf {
+        if b == b'\n' {
+            crlf_buf.push(b'\r');
+        }
+        crlf_buf.push(b);
+    }
     let mut out = stdout().lock();
     execute!(out, Clear(ClearType::All), MoveTo(0, 0))?;
-    out.write_all(&buf)?;
+    out.write_all(&crlf_buf)?;
     execute!(
         out,
         MoveTo(0, term_h.saturating_sub(1) as u16),
