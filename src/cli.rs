@@ -71,9 +71,9 @@ pub struct Cli {
     #[arg(long)]
     pub list_themes: bool,
 
-    /// Decoration mode override (auto, always, never)
-    #[arg(long, value_enum, default_value_t = ColorWhen::Auto)]
-    pub decorations: ColorWhen,
+    /// Decoration mode override
+    #[arg(long, value_enum, default_value_t = DecorationsWhen::Auto)]
+    pub decorations: DecorationsWhen,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -84,6 +84,9 @@ pub enum PagingWhen { Always, Auto, Never }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum WrapMode { Never, Character, Auto }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum DecorationsWhen { Always, Auto, Never }
 
 impl Cli {
     /// Parse from a custom args list (used for config-file merging)
