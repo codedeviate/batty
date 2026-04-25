@@ -228,6 +228,7 @@ fn write_grid_bot<W: Write>(out: &mut W, cfg: &PrinterConfig, ln_w: usize) -> Re
 
 fn expand_tabs(s: &str, width: usize) -> String {
     if width == 0 { return s.to_string(); }
+    use unicode_width::UnicodeWidthChar;
     let mut out = String::with_capacity(s.len());
     let mut col = 0usize;
     for ch in s.chars() {
@@ -236,7 +237,7 @@ fn expand_tabs(s: &str, width: usize) -> String {
             for _ in 0..pad { out.push(' '); col += 1; }
         } else {
             out.push(ch);
-            col += 1;
+            col += UnicodeWidthChar::width(ch).unwrap_or(0);
         }
     }
     out
@@ -281,6 +282,14 @@ mod tests {
     fn expand_tabs_to_4() {
         assert_eq!(expand_tabs("\tx", 4), "    x");
         assert_eq!(expand_tabs("a\tb", 4), "a   b");
+    }
+
+    #[test]
+    fn expand_tabs_handles_wide_chars() {
+        // 中 is double-width: after it, col is 2; tab pads to col 4 → 2 spaces.
+        assert_eq!(expand_tabs("中\tx", 4), "中  x");
+        // Two wide chars consume 4 cols; tab pads to col 8 → 4 spaces.
+        assert_eq!(expand_tabs("中文\tx", 4), "中文    x");
     }
 
     #[test]

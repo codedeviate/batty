@@ -91,6 +91,7 @@ dependencies = [
  "termimad",
  "toml",
  "two-face",
+ "unicode-width",
 ]
 
 [[package]]

@@ -18,6 +18,7 @@ anyhow        = "1"
 crossterm = "0.28"
 toml = { version = "0.8", default-features = false, features = ["parse"] }
 termimad = "0.34"
+unicode-width = "0.1"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
