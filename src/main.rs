@@ -3,6 +3,7 @@ mod config;
 mod git;
 mod highlight;
 mod input;
+mod interactive;
 mod pager;
 mod printer;
 mod syntax;
@@ -33,6 +34,10 @@ fn run() -> Result<()> {
 
     let syntax_set = syntax::build_syntax_set()?;
     let theme_set = theme_set();
+
+    if args.interactive {
+        return run_interactive(&args, &syntax_set, &theme_set);
+    }
 
     if args.list_languages {
         let mut names: Vec<&str> = syntax_set.syntaxes().iter().map(|s| s.name.as_str()).collect();
@@ -109,6 +114,36 @@ fn run() -> Result<()> {
         stdout.flush()?;
     }
     Ok(())
+}
+
+fn run_interactive(
+    args: &Cli,
+    syntax_set: &syntect::parsing::SyntaxSet,
+    theme_set: &syntect::highlighting::ThemeSet,
+) -> Result<()> {
+    if args.files.len() > 1 {
+        anyhow::bail!("interactive mode supports a single file");
+    }
+    let path = match args.files.first() {
+        Some(p) if p.as_os_str() != "-" => p.clone(),
+        _ => anyhow::bail!("interactive mode requires a file path"),
+    };
+    let input = InputKind::from_path(&path);
+    let contents = input.read()?;
+    let first_line = contents.lines().next();
+    let syntax = syntax::detect_syntax(syntax_set, Some(&path), args.language.as_deref(), first_line);
+    let theme = resolve_theme(theme_set, args.theme.as_deref());
+
+    interactive::run(
+        &input.display_name(),
+        &contents,
+        syntax,
+        syntax_set,
+        theme,
+        args.line_numbers,
+        args.tabs,
+        args.show_all,
+    )
 }
 
 fn term_width() -> usize {

@@ -15,6 +15,7 @@ anstyle       = "1"
 anstyle-query = "1"
 dirs          = "5"
 anyhow        = "1"
+crossterm = "0.28"
 
 [dev-dependencies]
 tempfile = "3"

@@ -121,6 +121,46 @@ fn relative_line_numbers_without_cursor_falls_back_to_absolute() {
 }
 
 #[test]
+fn interactive_rejects_multiple_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let a = dir.path().join("a.txt");
+    let b = dir.path().join("b.txt");
+    std::fs::write(&a, "x").unwrap();
+    std::fs::write(&b, "y").unwrap();
+    let out = batty().arg("-i").arg(&a).arg(&b).output().unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        err.contains("single file"),
+        "expected single-file error, got: {}",
+        err
+    );
+}
+
+#[test]
+fn interactive_rejects_stdin() {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = batty()
+        .arg("-i")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let _ = child.stdin.as_mut().unwrap().write_all(b"hello\n");
+    drop(child.stdin.take());
+    let out = child.wait_with_output().unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        err.contains("file path"),
+        "expected file-path error, got: {}",
+        err
+    );
+}
+
+#[test]
 fn diff_markers_appear_in_gutter() {
     use std::process::Command;
     let dir = tempfile::tempdir().unwrap();
