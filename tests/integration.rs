@@ -175,6 +175,57 @@ fn no_markdown_overrides_config() {
 }
 
 #[test]
+fn rhai_range_bitwise_and_nested_comments_render() {
+    // Ensures the grammar still parses (and produces ANSI) when the source
+    // exercises the v0.4.0 grammar additions: range/bitwise ops + nested
+    // block comments. Failure mode would be syntect's runtime parser error.
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("t.rhai");
+    std::fs::write(
+        &f,
+        "let r = 1..=10;\n\
+         let m = a & b | c ^ d;\n\
+         let s = x << 2 | y >> 1;\n\
+         /* outer /* inner */ outer */\n\
+         fn x() {}\n",
+    )
+    .unwrap();
+    let out = batty()
+        .args(["--plain", "--color=always"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let s = String::from_utf8(out.stdout).unwrap();
+    // Output contains ANSI escapes (grammar produced colored tokens).
+    assert!(s.contains("\x1b["), "expected ANSI in: {:?}", s);
+    // Strip ANSI to assert source content survived rendering. Tokens get
+    // separated by escape sequences in colored output, so we compare
+    // against the de-escaped text.
+    let stripped: String = {
+        let mut out = String::with_capacity(s.len());
+        let mut chars = s.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                // skip until 'm' (end of CSI)
+                for c2 in chars.by_ref() {
+                    if c2 == 'm' { break; }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    };
+    assert!(stripped.contains("1..=10"), "stripped: {:?}", stripped);
+    assert!(stripped.contains("inner"), "stripped: {:?}", stripped);
+}
+
+#[test]
 fn paging_never_overrides_interactive_config() {
     // With `interactive = true` in config, `--paging=never` should be
     // treated as a 'flat output' signal that also disables interactive mode.

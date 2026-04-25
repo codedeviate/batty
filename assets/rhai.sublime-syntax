@@ -37,10 +37,12 @@ contexts:
       scope: entity.name.function.rhai
     - match: '\b[A-Za-z_][A-Za-z0-9_]*\b'
       scope: variable.other.rhai
-    - match: '(\+=|\-=|\*=|\/=|==|!=|<=|>=|&&|\|\||\+|\-|\*|\/|%|<|>|!|=)'
+    - match: '(\+=|\-=|\*=|\/=|==|!=|<=|>=|<<|>>|&&|\|\||\.\.=|\.\.|\+|\-|\*|\/|%|<|>|!|=|&|\||\^|~)'
       scope: keyword.operator.rhai
   block_comment:
     - meta_scope: comment.block.rhai
+    - match: '/\*'
+      push: block_comment
     - match: '\*/'
       scope: punctuation.definition.comment.rhai
       pop: true
