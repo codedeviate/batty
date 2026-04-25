@@ -73,6 +73,8 @@ fn run() -> Result<()> {
         None => None,
     };
     let highlight_lines: HashSet<usize> = args.highlight_line.iter().copied().collect();
+    // First --highlight-line acts as the cursor reference for relative numbering in static mode.
+    let cursor: Option<usize> = args.highlight_line.first().copied();
     let width = term_width();
 
     // Default to stdin when no files given
@@ -100,6 +102,8 @@ fn run() -> Result<()> {
             use_color,
             width,
             language_name: &syntax.name,
+            cursor,
+            line_numbers: args.line_numbers,
         };
         print(&mut stdout, input, &contents, &mut hl, &cfg)?;
         stdout.flush()?;

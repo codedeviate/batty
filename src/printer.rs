@@ -1,4 +1,4 @@
-use crate::cli::WrapMode;
+use crate::cli::{LineNumberStyle, WrapMode};
 use crate::git::{LineChange, diff_for_file};
 use crate::highlight::Highlighter;
 use crate::input::{InputKind, LineRange};
@@ -61,6 +61,21 @@ pub struct PrinterConfig<'a> {
     pub use_color: bool,
     pub width: usize, // terminal width for grid drawing
     pub language_name: &'a str,
+    /// 1-indexed cursor line. Drives the cursor-indicator gutter and
+    /// is the reference point for relative line numbering.
+    pub cursor: Option<usize>,
+    pub line_numbers: LineNumberStyle,
+}
+
+/// Compute the visible label for a line number given the configured style.
+/// Pure function so it can be unit-tested without setting up a full render.
+pub fn line_number_label(lineno: usize, cursor: Option<usize>, style: LineNumberStyle) -> usize {
+    match (style, cursor) {
+        (LineNumberStyle::Relative, Some(c)) if lineno != c => {
+            if lineno > c { lineno - c } else { c - lineno }
+        }
+        _ => lineno,
+    }
 }
 
 const RESET: &str = "\x1b[0m";
@@ -127,12 +142,18 @@ pub fn print<W: Write>(
 
         // gutter
         if cfg.style.numbers {
-            let n = format!("{:>width$}", lineno, width = line_no_width);
+            let label = line_number_label(lineno, cfg.cursor, cfg.line_numbers);
+            let n = format!("{:>width$}", label, width = line_no_width);
             if cfg.use_color {
                 write!(out, "{}{}{} ", DIM, n, RESET)?;
             } else {
                 write!(out, "{} ", n)?;
             }
+        }
+        // cursor indicator (only renders when cfg.cursor is set)
+        if cfg.cursor.is_some() {
+            let glyph = if cfg.cursor == Some(lineno) { "▶" } else { " " };
+            write!(out, "{} ", glyph)?;
         }
         if cfg.style.changes {
             let m = match changes.get(&lineno) {
@@ -242,5 +263,28 @@ mod tests {
     fn show_all_marks_tabs() {
         let s = show_all("a\tb");
         assert!(s.contains('→'));
+    }
+
+    #[test]
+    fn label_absolute_returns_lineno() {
+        assert_eq!(line_number_label(7, Some(10), LineNumberStyle::Absolute), 7);
+        assert_eq!(line_number_label(7, None, LineNumberStyle::Absolute), 7);
+    }
+
+    #[test]
+    fn label_relative_without_cursor_falls_back_to_absolute() {
+        assert_eq!(line_number_label(7, None, LineNumberStyle::Relative), 7);
+    }
+
+    #[test]
+    fn label_relative_cursor_line_shows_absolute() {
+        assert_eq!(line_number_label(10, Some(10), LineNumberStyle::Relative), 10);
+    }
+
+    #[test]
+    fn label_relative_other_lines_show_distance() {
+        assert_eq!(line_number_label(7, Some(10), LineNumberStyle::Relative), 3);
+        assert_eq!(line_number_label(15, Some(10), LineNumberStyle::Relative), 5);
+        assert_eq!(line_number_label(1, Some(10), LineNumberStyle::Relative), 9);
     }
 }

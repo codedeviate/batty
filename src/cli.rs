@@ -74,6 +74,14 @@ pub struct Cli {
     /// Decoration mode override
     #[arg(long, value_enum, default_value_t = DecorationsWhen::Auto)]
     pub decorations: DecorationsWhen,
+
+    /// Line numbering style
+    #[arg(long, value_enum, default_value_t = LineNumberStyle::Absolute)]
+    pub line_numbers: LineNumberStyle,
+
+    /// Enter interactive TUI mode (vim-style navigation: j/k, g/G, Ctrl-d/u, q to quit)
+    #[arg(short = 'i', long)]
+    pub interactive: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -87,6 +95,9 @@ pub enum WrapMode { Never, Character, Auto }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum DecorationsWhen { Always, Auto, Never }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum LineNumberStyle { Absolute, Relative }
 
 impl Cli {
     /// Parse from a custom args list (used for config-file merging)
