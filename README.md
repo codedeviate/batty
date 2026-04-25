@@ -67,7 +67,7 @@ batty --list-themes                  # show all bundled themes
 | `--line-range <RANGE>` | Show only the given range, e.g. `10:20`, `:15`, `30:`, `42`. Rejects `0` and inverted ranges. |
 | `-H, --highlight-line <N>` | Highlight specific line(s) with inverse video. Repeatable. The first one acts as the **cursor reference** for relative numbering. |
 | `--tabs <N>` | Tab expansion width. *Default: 4.* |
-| `--wrap <MODE>` | `never` / `character` / `auto`. *Default: `auto`.* (Parsed but currently a no-op; terminals already wrap.) |
+| `--wrap <MODE>` | `never` / `character` / `auto`. *Default: `auto`.* `character` and `auto` break long lines at the terminal-width boundary with a continuation prefix that preserves the gutter (line numbers / cursor / change marker remain blank on continuation rows; the grid bar repeats). Wide CJK / emoji chars count their actual display width. `--wrap=never` emits each source line in one shot, letting the terminal soft-wrap (or truncate). Forced to `never` in interactive mode. |
 | `--decorations <WHEN>` | `always` / `auto` / `never`. *Default: `auto`.* `never` collapses to plain output. |
 
 ### Theme & color
@@ -266,8 +266,8 @@ batty --list-themes
 
 The full list lives in [`OUT-OF-SCOPE.md`](OUT-OF-SCOPE.md). Highlights:
 
-- `--wrap` doesn't actively wrap long lines (terminals already wrap).
 - `--diff-context` doesn't restrict output to changed regions; it only sets the diff window passed to git2.
+- `--wrap` breaks at column boundaries, not word boundaries — fine for source code, less ideal for prose. Forced off in interactive mode (cursor / viewport / status-bar all assume 1 source line = 1 visual row).
 - No Windows support (POSIX pager invocation, etc.).
 - Interactive mode is keyboard-only: no search, no mouse, no persistent cursor across runs.
 - Follow mode polls every 200 ms; a real `inotify`/`kqueue` watcher would be lower-latency but adds platform code.

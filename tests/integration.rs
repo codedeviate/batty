@@ -272,6 +272,63 @@ fn follow_and_interactive_are_mutually_exclusive() {
 }
 
 #[test]
+fn wrap_character_breaks_long_lines() {
+    // batty doesn't get a real terminal width during tests; --color=never
+    // and the default fallback width (80) make this deterministic. We
+    // craft a 200-char line that should produce multiple visual rows.
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("long.txt");
+    let line: String = "x".repeat(200);
+    std::fs::write(&f, format!("{}\nshort\n", line)).unwrap();
+    let out = batty()
+        .args([
+            "--wrap=character",
+            "--style=numbers,grid",
+            "--color=never",
+        ])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    // The 200-char line should be split into multiple body lines. With
+    // --color=never the gutter is `   1 │ ` (line-no=4 + space + grid),
+    // so body width ≈ 80 - 7 = 73 cols, giving us roughly ceil(200/73) ≈ 3
+    // visual rows for source line 1.
+    let xs_count = s.matches('x').count();
+    assert_eq!(xs_count, 200, "all 200 'x' chars should survive: got {}", xs_count);
+    // Continuation rows should have at least one `│` repeated past the first.
+    let bar_count = s.matches('│').count();
+    assert!(bar_count >= 3, "expected >=3 grid bars (line1 wraps + line2); got {}", bar_count);
+    // The actual content "short" survived.
+    assert!(s.contains("short"));
+}
+
+#[test]
+fn wrap_never_emits_full_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("long.txt");
+    let line: String = "y".repeat(200);
+    std::fs::write(&f, format!("{}\n", line)).unwrap();
+    let out = batty()
+        .args([
+            "--wrap=never",
+            "--style=numbers",
+            "--color=never",
+        ])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    // With wrap=never, batty never inserts breaks within the source line.
+    // The output has exactly one '\n' at the end of line 1 (and one for the
+    // trailing newline of the file).
+    let newlines = s.matches('\n').count();
+    assert_eq!(newlines, 1, "wrap=never should emit one line; got {} newlines", newlines);
+}
+
+#[test]
 fn rule_separates_multiple_files() {
     let dir = tempfile::tempdir().unwrap();
     let a = dir.path().join("a.txt");

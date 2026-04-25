@@ -267,7 +267,11 @@ fn render_frame(
             }),
             highlight_lines,
             tabs,
-            wrap: crate::cli::WrapMode::Auto,
+            // Interactive mode forces wrap=Never. Wrapping in raw-mode
+            // alt-screen would let one source line span multiple visual
+            // rows, breaking the viewport math (cursor / scroll / status
+            // bar). Long lines truncate at the terminal edge; documented.
+            wrap: crate::cli::WrapMode::Never,
             show_all,
             use_color: true,
             width: term_w,
