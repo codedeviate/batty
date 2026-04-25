@@ -1,0 +1,58 @@
+%YAML 1.2
+---
+name: Rhai
+file_extensions:
+  - rhai
+scope: source.rhai
+contexts:
+  main:
+    - match: '//.*$'
+      scope: comment.line.double-slash.rhai
+    - match: '/\*'
+      scope: punctuation.definition.comment.rhai
+      push: block_comment
+    - match: '\b(let|const|fn|if|else|while|loop|for|in|break|continue|return|import|export|as|try|catch|throw|switch|default|private|do|until)\b'
+      scope: keyword.control.rhai
+    - match: '\b(true|false|\(\))\b'
+      scope: constant.language.rhai
+    - match: '\b(this|global)\b'
+      scope: variable.language.rhai
+    - match: '"'
+      scope: punctuation.definition.string.begin.rhai
+      push: double_string
+    - match: "'"
+      scope: punctuation.definition.string.begin.rhai
+      push: single_string
+    - match: '\b0x[0-9A-Fa-f_]+\b'
+      scope: constant.numeric.hex.rhai
+    - match: '\b0b[01_]+\b'
+      scope: constant.numeric.binary.rhai
+    - match: '\b\d[\d_]*(\.\d[\d_]*)?([eE][+-]?\d+)?\b'
+      scope: constant.numeric.rhai
+    - match: '\b(print|debug|type_of|to_string|len|push|pop|shift|unshift|range)\b'
+      scope: support.function.builtin.rhai
+    - match: '\b([A-Za-z_][A-Za-z0-9_]*)\s*(?=\()'
+      scope: entity.name.function.rhai
+    - match: '\b[A-Za-z_][A-Za-z0-9_]*\b'
+      scope: variable.other.rhai
+    - match: '(\+|\-|\*|\/|%|==|!=|<=|>=|<|>|&&|\|\||!|=|\+=|\-=|\*=|\/=)'
+      scope: keyword.operator.rhai
+  block_comment:
+    - meta_scope: comment.block.rhai
+    - match: '\*/'
+      scope: punctuation.definition.comment.rhai
+      pop: true
+  double_string:
+    - meta_scope: string.quoted.double.rhai
+    - match: '\\.'
+      scope: constant.character.escape.rhai
+    - match: '"'
+      scope: punctuation.definition.string.end.rhai
+      pop: true
+  single_string:
+    - meta_scope: string.quoted.single.rhai
+    - match: "\\\\."
+      scope: constant.character.escape.rhai
+    - match: "'"
+      scope: punctuation.definition.string.end.rhai
+      pop: true
