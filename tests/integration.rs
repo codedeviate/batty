@@ -1,7 +1,11 @@
 use std::process::Command;
 
+/// Build a `batty` Command with a hermetic environment: ignores the user's
+/// `~/.config/batty/config.toml` by pointing `BATTY_CONFIG_PATH` at /dev/null.
 fn batty() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_batty"))
+    let mut c = Command::new(env!("CARGO_BIN_EXE_batty"));
+    c.env("BATTY_CONFIG_PATH", "/dev/null");
+    c
 }
 
 #[test]
@@ -118,6 +122,47 @@ fn relative_line_numbers_without_cursor_falls_back_to_absolute() {
     assert!(lines[2].trim_start().starts_with("3 "), "got: {}", lines[2]);
     // No cursor glyph should appear when cursor is None.
     assert!(!s.contains('▶'), "no cursor glyph expected: {}", s);
+}
+
+#[test]
+fn no_interactive_overrides_config() {
+    // Simulate a user config that sets interactive = true; --no-interactive on
+    // the CLI must override and let the static path render normally.
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = dir.path().join("config.toml");
+    std::fs::write(&cfg, "interactive = true\n").unwrap();
+    let f = dir.path().join("a.txt");
+    std::fs::write(&f, "hello\n").unwrap();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_batty"))
+        .env("BATTY_CONFIG_PATH", &cfg)
+        .args(["--no-interactive", "--plain", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(String::from_utf8(out.stdout).unwrap(), "hello\n");
+}
+
+#[test]
+fn duplicate_bool_flags_do_not_conflict() {
+    // Config can emit a bool flag that's also passed on the CLI; clap must
+    // treat the second occurrence as an override, not an error.
+    let out = batty()
+        .args(["--list-languages", "--list-languages"])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "duplicate --list-languages should not error; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let s = String::from_utf8(out.stdout).unwrap();
+    assert!(s.to_lowercase().contains("rhai"));
 }
 
 #[test]

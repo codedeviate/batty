@@ -24,19 +24,19 @@ pub struct Cli {
     pub paging: PagingWhen,
 
     /// Plain output (no decorations, equivalent to --style=plain)
-    #[arg(short = 'p', long)]
+    #[arg(short = 'p', long, overrides_with = "plain")]
     pub plain: bool,
 
     /// Show non-printable characters
-    #[arg(short = 'A', long)]
+    #[arg(short = 'A', long, overrides_with = "show_all")]
     pub show_all: bool,
 
     /// Show line numbers (equivalent to --style=numbers)
-    #[arg(short = 'n', long)]
+    #[arg(short = 'n', long, overrides_with = "number")]
     pub number: bool,
 
     /// Show git diff markers
-    #[arg(short = 'd', long)]
+    #[arg(short = 'd', long, overrides_with = "diff")]
     pub diff: bool,
 
     /// Lines of context for diff
@@ -64,11 +64,11 @@ pub struct Cli {
     pub wrap: WrapMode,
 
     /// List supported languages and exit
-    #[arg(short = 'L', long)]
+    #[arg(short = 'L', long, overrides_with = "list_languages")]
     pub list_languages: bool,
 
     /// List supported themes and exit
-    #[arg(long)]
+    #[arg(long, overrides_with = "list_themes")]
     pub list_themes: bool,
 
     /// Decoration mode override
@@ -80,8 +80,12 @@ pub struct Cli {
     pub line_numbers: LineNumberStyle,
 
     /// Enter interactive TUI mode (vim-style navigation: j/k, g/G, Ctrl-d/u, q to quit)
-    #[arg(short = 'i', long)]
+    #[arg(short = 'i', long, overrides_with = "no_interactive")]
     pub interactive: bool,
+
+    /// Disable interactive mode. Overrides `interactive = true` in the config file.
+    #[arg(long, hide_short_help = true, overrides_with = "interactive")]
+    pub no_interactive: bool,
 
     /// Reserve N rows at the top of the screen in interactive mode. Useful for
     /// terminals like Warp that overlay UI on the alternate screen's top rows.

@@ -35,10 +35,8 @@ fn run() -> Result<()> {
     let syntax_set = syntax::build_syntax_set()?;
     let theme_set = theme_set();
 
-    if args.interactive {
-        return run_interactive(&args, &syntax_set, &theme_set);
-    }
-
+    // List-* short-circuits run before interactive so the config's
+    // `interactive = true` doesn't block listing flags on the CLI.
     if args.list_languages {
         let mut names: Vec<&str> = syntax_set.syntaxes().iter().map(|s| s.name.as_str()).collect();
         names.sort_unstable();
@@ -50,6 +48,10 @@ fn run() -> Result<()> {
         names.sort();
         for n in names { println!("{}", n); }
         return Ok(());
+    }
+
+    if args.interactive {
+        return run_interactive(&args, &syntax_set, &theme_set);
     }
 
     // Capture stdout TTY-ness BEFORE pager setup, since pager replaces stdout

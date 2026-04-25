@@ -1,10 +1,17 @@
 use std::fs;
 use std::path::PathBuf;
 
-/// Resolve the config file path. Always `~/.config/batty/config.toml`
-/// (XDG-style) on every platform — including macOS, where
-/// `dirs::config_dir()` would return `~/Library/Application Support`.
+/// Resolve the config file path.
+///
+/// Resolution order:
+/// 1. `BATTY_CONFIG_PATH` env var (absolute path to a config file)
+/// 2. `~/.config/batty/config.toml` (XDG-style on every platform, including
+///    macOS where `dirs::config_dir()` would return `~/Library/Application
+///    Support`).
 pub fn config_path() -> Option<PathBuf> {
+    if let Some(p) = std::env::var_os("BATTY_CONFIG_PATH") {
+        return Some(PathBuf::from(p));
+    }
     dirs::home_dir().map(|h| h.join(".config").join("batty").join("config.toml"))
 }
 
