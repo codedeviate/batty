@@ -1,5 +1,6 @@
 mod cli;
 mod config;
+mod git;
 mod highlight;
 mod input;
 mod syntax;
