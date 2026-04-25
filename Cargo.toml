@@ -7,7 +7,7 @@ license = "MIT"
 
 [dependencies]
 clap          = { version = "4", features = ["derive", "env"] }
-syntect       = { version = "5", default-features = false, features = ["parsing", "regex-onig"] }
+syntect       = { version = "5", default-features = false, features = ["parsing", "regex-onig", "yaml-load"] }
 two-face      = "0.4"
 git2          = { version = "0.19", default-features = false }
 pager         = "0.16"
