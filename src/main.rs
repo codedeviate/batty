@@ -1,3 +1,9 @@
+mod cli;
+
+use clap::Parser;
+use cli::Cli;
+
 fn main() {
-    println!("batty placeholder");
+    let args = Cli::parse();
+    eprintln!("parsed: {:?}", args);
 }
