@@ -47,17 +47,20 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
+    // Capture stdout TTY-ness BEFORE pager setup, since pager replaces stdout
+    // with a pipe.
+    let stdout_was_tty = {
+        use std::io::IsTerminal;
+        std::io::stdout().is_terminal()
+    };
+
     pager::setup(args.paging);
 
-    // Color decision
+    // Color decision (uses pre-pager TTY status)
     let use_color = match args.color {
         ColorWhen::Always => true,
         ColorWhen::Never => false,
-        ColorWhen::Auto => {
-            use std::io::IsTerminal;
-            std::io::stdout().is_terminal()
-                && std::env::var_os("NO_COLOR").is_none()
-        }
+        ColorWhen::Auto => stdout_was_tty && std::env::var_os("NO_COLOR").is_none(),
     };
 
     let style = StyleFlags::parse(&args.style, args.plain, args.number, args.diff);
