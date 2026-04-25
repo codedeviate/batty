@@ -175,6 +175,103 @@ fn no_markdown_overrides_config() {
 }
 
 #[test]
+fn follow_initial_render_shows_last_n_lines() {
+    // Spawn batty with -f and --tail-lines=3 against a static file. Poll for
+    // the initial render to land in the output file (don't rely on a fixed
+    // sleep), then kill the child.
+    use std::fs::File;
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("log.txt");
+    let body: String = (1..=10).map(|n| format!("line {}\n", n)).collect();
+    std::fs::write(&f, body).unwrap();
+    let out_path = dir.path().join("stdout.txt");
+    let err_path = dir.path().join("stderr.txt");
+    let stdout_file = File::create(&out_path).unwrap();
+    let stderr_file = File::create(&err_path).unwrap();
+
+    let mut child = batty()
+        .args(["-f", "--tail-lines=3", "--style=plain,numbers", "--color=never"])
+        .arg(&f)
+        .stdout(stdout_file)
+        .stderr(stderr_file)
+        .spawn()
+        .unwrap();
+
+    // Poll the output file for up to 10 seconds, looking for the last line
+    // we expect ("line 10"). Stops as soon as it appears.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut out = String::new();
+    while std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        if let Ok(s) = std::fs::read_to_string(&out_path) {
+            if s.contains("line 10") {
+                out = s;
+                break;
+            }
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+
+    if out.is_empty() {
+        let err = std::fs::read_to_string(&err_path).unwrap_or_default();
+        let final_out = std::fs::read_to_string(&out_path).unwrap_or_default();
+        panic!("never saw 'line 10' within 10s. stderr: {:?}, stdout: {:?}", err, final_out);
+    }
+    // Last 3 lines (8, 9, 10) should appear; earlier lines should not.
+    assert!(out.contains("line 8"), "expected line 8 in: {:?}", out);
+    assert!(out.contains("line 9"), "expected line 9 in: {:?}", out);
+    assert!(out.contains("line 10"), "expected line 10 in: {:?}", out);
+    assert!(!out.contains("line 1\n"), "should not have line 1: {:?}", out);
+    // Line numbers should be the actual file positions, not 1..3.
+    assert!(out.contains("8 "));
+    assert!(out.contains("10 "));
+}
+
+#[test]
+fn follow_rejects_multiple_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let a = dir.path().join("a.txt");
+    let b = dir.path().join("b.txt");
+    std::fs::write(&a, "x").unwrap();
+    std::fs::write(&b, "y").unwrap();
+    let out = batty().arg("-f").arg(&a).arg(&b).output().unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8(out.stderr).unwrap();
+    assert!(err.contains("single file"), "got: {}", err);
+}
+
+#[test]
+fn follow_rejects_stdin() {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = batty()
+        .arg("-f")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let _ = child.stdin.as_mut().unwrap().write_all(b"x\n");
+    drop(child.stdin.take());
+    let out = child.wait_with_output().unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8(out.stderr).unwrap();
+    assert!(err.contains("file path"), "got: {}", err);
+}
+
+#[test]
+fn follow_and_interactive_are_mutually_exclusive() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("a.txt");
+    std::fs::write(&f, "x").unwrap();
+    let out = batty().args(["-i", "-f"]).arg(&f).output().unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8(out.stderr).unwrap();
+    assert!(err.contains("mutually exclusive"), "got: {}", err);
+}
+
+#[test]
 fn rule_separates_multiple_files() {
     let dir = tempfile::tempdir().unwrap();
     let a = dir.path().join("a.txt");

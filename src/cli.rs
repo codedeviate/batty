@@ -101,6 +101,19 @@ pub struct Cli {
     /// Disable Markdown rendering. Overrides `markdown = true` in the config.
     #[arg(long, overrides_with = "markdown")]
     pub no_markdown: bool,
+
+    /// Tail mode: show the last lines of the file and keep watching for new
+    /// content (like `tail -f`). Single file only; no stdin.
+    #[arg(short = 'f', long, overrides_with = "no_follow")]
+    pub follow: bool,
+
+    /// Disable follow mode. Overrides `follow = true` in the config.
+    #[arg(long, overrides_with = "follow")]
+    pub no_follow: bool,
+
+    /// Number of trailing lines to show in follow mode.
+    #[arg(long, default_value_t = 10)]
+    pub tail_lines: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]

@@ -1,5 +1,6 @@
 mod cli;
 mod config;
+mod follow;
 mod git;
 mod highlight;
 mod input;
@@ -62,6 +63,12 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
+    // Interactive (TUI) and follow (streaming) are different output modes
+    // and can't coexist; reject early before either path fires.
+    if args.interactive && args.follow {
+        anyhow::bail!("--interactive and --follow are mutually exclusive");
+    }
+
     // --paging=never is treated as a "give me flat output" signal that
     // also disables interactive mode. This lets users with `interactive =
     // true` in their config bypass the TUI for a single run by passing
@@ -69,6 +76,12 @@ fn run() -> Result<()> {
     let want_interactive = args.interactive && args.paging != cli::PagingWhen::Never;
     if want_interactive {
         return run_interactive(&args, &syntax_set, &theme_set);
+    }
+
+    // Follow / tail-mode short-circuit. Bypasses the pager (streaming output
+    // doesn't compose with `less`).
+    if args.follow {
+        return follow::run(&args, &syntax_set, &theme_set);
     }
 
     // Capture stdout TTY-ness BEFORE pager setup, since pager replaces stdout
@@ -179,7 +192,7 @@ fn run_interactive(
     )
 }
 
-fn term_width() -> usize {
+pub fn term_width() -> usize {
     crossterm::terminal::size()
         .map(|(w, _)| w as usize)
         .unwrap_or(80)
