@@ -15,13 +15,15 @@ pub enum LineChange {
 pub fn diff_for_file(path: &Path) -> HashMap<usize, LineChange> {
     let mut out = HashMap::new();
     let Ok(repo) = Repository::discover(path) else { return out };
-    let workdir = match repo.workdir() {
-        Some(w) => w,
-        None => return out,
+    let Some(workdir) = repo.workdir().and_then(|w| w.canonicalize().ok()) else {
+        return out;
     };
-    let rel = match path.canonicalize().ok().and_then(|p| p.strip_prefix(workdir).ok().map(|q| q.to_path_buf())) {
-        Some(r) => r,
-        None => return out,
+    let Some(rel) = path
+        .canonicalize()
+        .ok()
+        .and_then(|p| p.strip_prefix(&workdir).ok().map(|q| q.to_path_buf()))
+    else {
+        return out;
     };
 
     let head_tree = match repo.head().and_then(|h| h.peel_to_tree()) {
@@ -44,15 +46,27 @@ pub fn diff_for_file(path: &Path) -> HashMap<usize, LineChange> {
                 match line.origin() {
                     '+' => {
                         if let Some(n) = new_lineno {
-                            out.entry(n).or_insert(LineChange::Added);
+                            match out.get(&n) {
+                                Some(LineChange::RemovedAbove) => {
+                                    out.insert(n, LineChange::Modified);
+                                }
+                                Some(_) => {} // already Added/Modified
+                                None => {
+                                    out.insert(n, LineChange::Added);
+                                }
+                            }
                         }
                     }
                     '-' => {
                         if let Some(n) = old_lineno {
-                            if let Some(slot) = out.get_mut(&n) {
-                                *slot = LineChange::Modified;
-                            } else {
-                                out.insert(n, LineChange::RemovedAbove);
+                            match out.get(&n) {
+                                Some(LineChange::Added) => {
+                                    out.insert(n, LineChange::Modified);
+                                }
+                                Some(_) => {} // already Modified/RemovedAbove
+                                None => {
+                                    out.insert(n, LineChange::RemovedAbove);
+                                }
                             }
                         }
                     }
@@ -71,6 +85,16 @@ mod tests {
     use std::fs;
     use std::process::Command;
 
+    fn run_git(p: &Path, args: &[&str]) {
+        Command::new("git").args(args).current_dir(p).output().unwrap();
+    }
+
+    fn init_repo(p: &Path) {
+        run_git(p, &["init", "-q"]);
+        run_git(p, &["config", "user.email", "t@e.x"]);
+        run_git(p, &["config", "user.name", "t"]);
+    }
+
     #[test]
     fn empty_for_non_repo() {
         let dir = tempfile::tempdir().unwrap();
@@ -80,21 +104,61 @@ mod tests {
     }
 
     #[test]
-    fn detects_added_line_in_repo() {
+    fn detects_added_line() {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path();
-        let run = |args: &[&str]| {
-            Command::new("git").args(args).current_dir(p).output().unwrap()
-        };
-        run(&["init", "-q"]);
-        run(&["config", "user.email", "t@e.x"]);
-        run(&["config", "user.name", "t"]);
+        init_repo(p);
         let f = p.join("a.txt");
         fs::write(&f, "line1\n").unwrap();
-        run(&["add", "a.txt"]);
-        run(&["commit", "-q", "-m", "init"]);
+        run_git(p, &["add", "a.txt"]);
+        run_git(p, &["commit", "-q", "-m", "init"]);
         fs::write(&f, "line1\nline2\n").unwrap();
         let map = diff_for_file(&f);
         assert_eq!(map.get(&2), Some(&LineChange::Added));
+    }
+
+    #[test]
+    fn detects_modified_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        init_repo(p);
+        let f = p.join("a.txt");
+        fs::write(&f, "alpha\n").unwrap();
+        run_git(p, &["add", "a.txt"]);
+        run_git(p, &["commit", "-q", "-m", "init"]);
+        fs::write(&f, "ALPHA\n").unwrap();
+        let map = diff_for_file(&f);
+        assert_eq!(map.get(&1), Some(&LineChange::Modified), "got: {:?}", map);
+    }
+
+    #[test]
+    fn detects_deleted_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        init_repo(p);
+        let f = p.join("a.txt");
+        fs::write(&f, "line1\nline2\n").unwrap();
+        run_git(p, &["add", "a.txt"]);
+        run_git(p, &["commit", "-q", "-m", "init"]);
+        fs::write(&f, "line1\n").unwrap();
+        let map = diff_for_file(&f);
+        // Deletion of line 2: gets reported as RemovedAbove keyed at old line number 2.
+        assert_eq!(map.get(&2), Some(&LineChange::RemovedAbove), "got: {:?}", map);
+    }
+
+    #[test]
+    fn untracked_file_returns_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        init_repo(p);
+        // Make initial commit so HEAD exists
+        let init = p.join("README");
+        fs::write(&init, "x\n").unwrap();
+        run_git(p, &["add", "README"]);
+        run_git(p, &["commit", "-q", "-m", "init"]);
+        // Now create an untracked file
+        let f = p.join("untracked.txt");
+        fs::write(&f, "new content\n").unwrap();
+        assert!(diff_for_file(&f).is_empty(), "untracked file should produce no markers");
     }
 }
