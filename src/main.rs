@@ -3,6 +3,7 @@ mod config;
 mod git;
 mod highlight;
 mod input;
+mod printer;
 mod syntax;
 
 use clap::Parser;
