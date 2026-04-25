@@ -19,7 +19,8 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = ColorWhen::Auto)]
     pub color: ColorWhen,
 
-    /// When to use the pager
+    /// When to use the pager. `never` also disables interactive mode (treats
+    /// the flag as a global "flat output" override).
     #[arg(long, value_enum, default_value_t = PagingWhen::Auto)]
     pub paging: PagingWhen,
 

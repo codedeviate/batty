@@ -50,7 +50,12 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
-    if args.interactive {
+    // --paging=never is treated as a "give me flat output" signal that
+    // also disables interactive mode. This lets users with `interactive =
+    // true` in their config bypass the TUI for a single run by passing
+    // `--paging=never` without having to also remember `--no-interactive`.
+    let want_interactive = args.interactive && args.paging != cli::PagingWhen::Never;
+    if want_interactive {
         return run_interactive(&args, &syntax_set, &theme_set);
     }
 

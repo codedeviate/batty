@@ -125,6 +125,30 @@ fn relative_line_numbers_without_cursor_falls_back_to_absolute() {
 }
 
 #[test]
+fn paging_never_overrides_interactive_config() {
+    // With `interactive = true` in config, `--paging=never` should be
+    // treated as a 'flat output' signal that also disables interactive mode.
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = dir.path().join("config.toml");
+    std::fs::write(&cfg, "interactive = true\n").unwrap();
+    let f = dir.path().join("a.txt");
+    std::fs::write(&f, "hello\n").unwrap();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_batty"))
+        .env("BATTY_CONFIG_PATH", &cfg)
+        .args(["--paging=never", "--plain", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(String::from_utf8(out.stdout).unwrap(), "hello\n");
+}
+
+#[test]
 fn no_interactive_overrides_config() {
     // Simulate a user config that sets interactive = true; --no-interactive on
     // the CLI must override and let the static path render normally.
