@@ -84,7 +84,7 @@ pub struct Cli {
     pub interactive: bool,
 
     /// Disable interactive mode. Overrides `interactive = true` in the config file.
-    #[arg(long, hide_short_help = true, overrides_with = "interactive")]
+    #[arg(long, overrides_with = "interactive")]
     pub no_interactive: bool,
 
     /// Reserve N rows at the top of the screen in interactive mode. Useful for
