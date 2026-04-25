@@ -2,7 +2,7 @@
 
 A from-scratch Rust clone of [`bat`](https://github.com/sharkdp/bat) — `cat` with syntax highlighting, git diff markers, and a pager. Plus:
 
-- **Bundled Rhai grammar** — `.rhai` scripts highlight out of the box.
+- **Bundled Rhai grammar** — `.rhai` scripts highlight out of the box, including template strings with `${interpolation}`, `#{}` map literals, `??` / `?.` operators, `::` module paths, and a broad builtin list.
 - **Interactive TUI mode** (`-i`) — vim-style navigation, line by line.
 - **Vim-style relative line numbers** — center distances on a cursor.
 - **Markdown rendering** (`-m`) — render Markdown like `glow`, with a `m` toggle in interactive mode.

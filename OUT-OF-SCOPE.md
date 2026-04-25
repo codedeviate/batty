@@ -43,11 +43,9 @@ Things that have been considered, intentionally not implemented, and may stay th
 
 ## Rhai grammar gaps
 
-- **Backtick template strings** with `${name}` interpolation — Rhai supports them; our grammar doesn't tokenize the interpolation.
-- **`#{}` map literals** — not specifically scoped.
-- **Nullable / Elvis-like `?` and `??`** — not matched.
-- **Closure pipe syntax** `|x| x + 1` — `|` is matched as bitwise-or, no special closure context.
-- **`Fn(...)` keyword and `this`/`global` semantics** — `this`/`global` are tagged `variable.language` but the broader semantics aren't reflected.
+- **Closure pipe syntax** `|x| x + 1` — `|` is matched as bitwise-or, no special closure context. Disambiguating from bitwise OR requires backtracking-style context the grammar engine can't easily express; most users won't notice since identifier and operator both color reasonably.
+- **Full semantic awareness** of `Fn(...)`, `this`, `global`, etc. — we tokenize them (Fn as builtin; this/global as variable.language) but don't reflect Rhai's special semantics (e.g., `this` only valid inside method-style functions). That's intelligence beyond TextMate scope.
+- **Char literal scope** — single-quoted `'a'` are technically char literals in Rhai, but we color them as `string.quoted.single` for theme compatibility. Could be revisited if a theme really needs different coloring.
 
 ## Code-quality nits (intentionally tolerated)
 
