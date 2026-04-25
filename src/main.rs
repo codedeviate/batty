@@ -63,7 +63,10 @@ fn run() -> Result<()> {
         ColorWhen::Auto => stdout_was_tty && std::env::var_os("NO_COLOR").is_none(),
     };
 
-    let style = StyleFlags::parse(&args.style, args.plain, args.number, args.diff);
+    // --decorations=never collapses to plain output (overrides --style)
+    let force_plain = args.plain
+        || matches!(args.decorations, cli::DecorationsWhen::Never);
+    let style = StyleFlags::parse(&args.style, force_plain, args.number, args.diff);
     let theme = resolve_theme(&theme_set, args.theme.as_deref());
     let line_range = match &args.line_range {
         Some(s) => Some(LineRange::parse(s)?),

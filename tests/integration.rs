@@ -47,3 +47,50 @@ fn line_range_filters_output() {
     let s = String::from_utf8(out.stdout).unwrap();
     assert_eq!(s, "b\nc\n");
 }
+
+#[test]
+fn stdin_with_language_hint() {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = batty()
+        .args(["--plain", "--color=never", "--language", "rust"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.as_mut().unwrap().write_all(b"fn main() {}\n").unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(s, "fn main() {}\n");
+}
+
+#[test]
+fn diff_markers_appear_in_gutter() {
+    use std::process::Command;
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    let run_git = |args: &[&str]| {
+        Command::new("git").args(args).current_dir(p).output().unwrap();
+    };
+    run_git(&["init", "-q"]);
+    run_git(&["config", "user.email", "t@e.x"]);
+    run_git(&["config", "user.name", "t"]);
+    let f = p.join("a.txt");
+    std::fs::write(&f, "alpha\nbeta\n").unwrap();
+    run_git(&["add", "a.txt"]);
+    run_git(&["commit", "-q", "-m", "init"]);
+    // Modify line 1, add line 3
+    std::fs::write(&f, "ALPHA\nbeta\ngamma\n").unwrap();
+
+    let out = batty()
+        .args(["--style=numbers,changes", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    // Modified line 1 → "~", added line 3 → "+"
+    assert!(s.contains('~'), "expected ~ marker for modified line; got: {}", s);
+    assert!(s.contains('+'), "expected + marker for added line; got: {}", s);
+}
