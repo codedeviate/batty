@@ -6,6 +6,7 @@ A from-scratch Rust clone of [`bat`](https://github.com/sharkdp/bat) — `cat` w
 - **Interactive TUI mode** (`-i`) — vim-style navigation, line by line.
 - **Vim-style relative line numbers** — center distances on a cursor.
 - **Markdown rendering** (`-m`) — render Markdown like `glow`, with a `m` toggle in interactive mode.
+- **Tail / follow mode** (`-f`) — `tail -f` semantics with syntax highlighting.
 - **TOML config** — `~/.config/batty/config.toml`.
 - **Small release binary** — ~2.8 MB with full grammar/theme bundles.
 
@@ -32,6 +33,7 @@ batty src/main.rs                    # full decorations
 batty -p src/main.rs                 # plain output
 batty -i src/main.rs                 # interactive TUI
 batty -m README.md                   # render Markdown (glow-style)
+batty -f error.log                   # tail -f with highlighting
 batty --line-range 10:30 file.rs     # only lines 10–30
 echo 'fn main() {}' | batty -l rust  # stdin with language hint
 batty --diff modified_file.rs        # gutter diff markers
@@ -93,6 +95,16 @@ When `--markdown` is on, per-line decorations (line numbers, diff markers, curso
 | `--no-interactive` | Disable interactive mode. Overrides `interactive = true` in the config. |
 | `--top-pad <N>` | Reserve N rows at the top of the screen. *Default: 0.* Use `2` in [Warp](https://www.warp.dev/) to dodge its UI overlay. |
 
+### Tail / follow
+
+| Flag | Description |
+|---|---|
+| `-f, --follow` | `tail -f` semantics: render the last `--tail-lines` lines, then poll the file every 200 ms and render appended content as it arrives. Single file only; no stdin; bypasses the pager. Mutually exclusive with `--interactive`. Ctrl-C exits. |
+| `--no-follow` | Disable follow mode. Overrides `follow = true` in the config. |
+| `--tail-lines <N>` | Number of trailing lines to show on launch. *Default: 10.* |
+
+Truncation / rotation: when the file shrinks (e.g. `> error.log` or logrotate), batty prints a one-line notice and re-renders the last `--tail-lines` of the new content.
+
 ### Pager
 
 | Flag | Description |
@@ -131,6 +143,8 @@ top-pad        = 2
 line-numbers   = "relative"
 interactive    = true
 markdown       = false       # set true to default-render markdown
+follow         = false       # set true to default to tail mode
+tail-lines     = 10
 highlight-line = [10, 20]
 ```
 
@@ -211,6 +225,12 @@ batty -m README.md
 # Mix: render markdown AND open it interactively (m toggles to raw)
 batty -m -i README.md
 
+# Tail a log file with syntax highlighting
+batty -f error.log
+
+# Tail with the last 50 lines visible on launch
+batty -f --tail-lines=50 error.log
+
 # Highlight a Rhai script
 batty path/to/script.rhai
 
@@ -244,13 +264,14 @@ batty --list-themes
 
 ## Limitations
 
-These are deliberately deferred (parsed but inert, never crashing):
+The full list lives in [`OUT-OF-SCOPE.md`](OUT-OF-SCOPE.md). Highlights:
 
 - `--wrap` doesn't actively wrap long lines (terminals already wrap).
 - `--diff-context` doesn't restrict output to changed regions; it only sets the diff window passed to git2.
-- `rule` and `snip` style components don't render an inter-file separator.
-- No Windows support (uses `tput`, POSIX pager, etc.).
+- No Windows support (POSIX pager invocation, etc.).
 - Interactive mode is keyboard-only: no search, no mouse, no persistent cursor across runs.
+- Follow mode polls every 200 ms; a real `inotify`/`kqueue` watcher would be lower-latency but adds platform code.
+- Follow mode rebuilds the syntax highlighter on every poll, so multi-line constructs (block comments, multi-line strings) that span a poll boundary may briefly miscolor.
 
 ---
 
