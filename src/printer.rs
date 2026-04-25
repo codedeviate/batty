@@ -149,6 +149,25 @@ pub fn print<W: Write>(
         return Ok(());
     }
 
+    // Snip prefix: when --style includes `snip` and --line-range hides the
+    // start of the file, emit a single "N lines skipped" indicator so the
+    // reader knows there's content above the visible window.
+    if cfg.style.snip {
+        if let Some(r) = cfg.line_range {
+            if r.start > 1 {
+                let n = r.start - 1;
+                writeln!(
+                    out,
+                    "{}··· {} line{} skipped ···{}",
+                    if cfg.use_color { DIM } else { "" },
+                    n,
+                    if n == 1 { "" } else { "s" },
+                    if cfg.use_color { RESET } else { "" },
+                )?;
+            }
+        }
+    }
+
     // Body
     for (idx, raw_line) in contents.lines().enumerate() {
         let lineno = idx + 1;
@@ -199,6 +218,24 @@ pub fn print<W: Write>(
         out.write_all(highlighted.as_bytes())?;
         if cfg.use_color {
             write!(out, "{}", RESET)?;
+        }
+    }
+
+    // Snip suffix: when --style includes `snip` and --line-range hides the
+    // tail of the file, emit a "N lines skipped" indicator at the end.
+    if cfg.style.snip {
+        if let Some(r) = cfg.line_range {
+            if r.end < line_count {
+                let n = line_count - r.end;
+                writeln!(
+                    out,
+                    "{}··· {} line{} skipped ···{}",
+                    if cfg.use_color { DIM } else { "" },
+                    n,
+                    if n == 1 { "" } else { "s" },
+                    if cfg.use_color { RESET } else { "" },
+                )?;
+            }
         }
     }
 

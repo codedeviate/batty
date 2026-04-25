@@ -109,7 +109,12 @@ fn run() -> Result<()> {
     };
 
     let mut stdout = std::io::stdout().lock();
-    for input in &inputs {
+    for (idx, input) in inputs.iter().enumerate() {
+        // Inter-file rule: drawn before every input after the first when
+        // `--style` includes `rule`. Reuses the grid glyph for visual parity.
+        if idx > 0 && style.rule {
+            writeln!(stdout, "{}", "─".repeat(width.saturating_sub(1)))?;
+        }
         let contents = input.read()?;
         let path = match input { InputKind::File(p) => Some(p.as_path()), InputKind::Stdin => None };
         let first_line = contents.lines().next();

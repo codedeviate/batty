@@ -175,6 +175,55 @@ fn no_markdown_overrides_config() {
 }
 
 #[test]
+fn rule_separates_multiple_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let a = dir.path().join("a.txt");
+    let b = dir.path().join("b.txt");
+    std::fs::write(&a, "alpha\n").unwrap();
+    std::fs::write(&b, "bravo\n").unwrap();
+    let out = batty()
+        .args(["--style=rule,header,numbers", "--color=never"])
+        .arg(&a)
+        .arg(&b)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    // The rule glyph appears between the two files' renders.
+    assert!(s.contains('─'), "expected rule glyph in: {}", s);
+    // Both files' content is present.
+    assert!(s.contains("alpha"));
+    assert!(s.contains("bravo"));
+}
+
+#[test]
+fn snip_marks_clipped_line_range() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("a.txt");
+    let body: String = (1..=20).map(|n| format!("line {}\n", n)).collect();
+    std::fs::write(&f, body).unwrap();
+    let out = batty()
+        .args([
+            "--style=snip,numbers",
+            "--color=never",
+            "--line-range",
+            "5:10",
+        ])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    // Snip prefix: 4 lines skipped above
+    assert!(s.contains("4 lines skipped"), "missing prefix snip: {}", s);
+    // Snip suffix: 10 lines skipped below
+    assert!(s.contains("10 lines skipped"), "missing suffix snip: {}", s);
+    // Visible lines 5..=10 are present
+    assert!(s.contains("line 5"));
+    assert!(s.contains("line 10"));
+}
+
+#[test]
 fn rhai_range_bitwise_and_nested_comments_render() {
     // Ensures the grammar still parses (and produces ANSI) when the source
     // exercises the v0.4.0 grammar additions: range/bitwise ops + nested
