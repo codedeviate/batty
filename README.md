@@ -5,8 +5,9 @@ A from-scratch Rust clone of [`bat`](https://github.com/sharkdp/bat) — `cat` w
 - **Bundled Rhai grammar** — `.rhai` scripts highlight out of the box.
 - **Interactive TUI mode** (`-i`) — vim-style navigation, line by line.
 - **Vim-style relative line numbers** — center distances on a cursor.
+- **Markdown rendering** (`-m`) — render Markdown like `glow`, with a `m` toggle in interactive mode.
 - **TOML config** — `~/.config/batty/config.toml`.
-- **Small release binary** — ~2.6 MB with full grammar/theme bundles.
+- **Small release binary** — ~2.8 MB with full grammar/theme bundles.
 
 Targets macOS and Linux.
 
@@ -30,6 +31,7 @@ Move it onto your `$PATH` however you like (e.g. `cp target/release/batty ~/.loc
 batty src/main.rs                    # full decorations
 batty -p src/main.rs                 # plain output
 batty -i src/main.rs                 # interactive TUI
+batty -m README.md                   # render Markdown (glow-style)
 batty --line-range 10:30 file.rs     # only lines 10–30
 echo 'fn main() {}' | batty -l rust  # stdin with language hint
 batty --diff modified_file.rs        # gutter diff markers
@@ -73,6 +75,15 @@ batty --list-themes                  # show all bundled themes
 | `--theme <NAME>` | Color theme. Default: `Monokai Extended`. See `--list-themes`. |
 | `--color <WHEN>` | `always` / `auto` / `never`. *Default: `auto`.* `auto` enables color when stdout is a TTY and `NO_COLOR` is unset. |
 | `--line-numbers <STYLE>` | `absolute` (default) or `relative`. With `relative`, the cursor line shows its absolute number, others show distance. Falls back to `absolute` if no cursor is set. |
+
+### Markdown rendering
+
+| Flag | Description |
+|---|---|
+| `-m, --markdown` | Render Markdown to terminal escapes instead of showing the raw source. Uses `termimad` under the hood. Works on any file, not just `.md`. |
+| `--no-markdown` | Disable Markdown rendering. Overrides `markdown = true` in the config. |
+
+When `--markdown` is on, per-line decorations (line numbers, diff markers, cursor indicator, line range filtering) are skipped — Markdown rendering produces its own block structure where they don't apply. The header still prints with the language label `Markdown (rendered)`.
 
 ### Interactive mode
 
@@ -119,6 +130,7 @@ tabs           = 2
 top-pad        = 2
 line-numbers   = "relative"
 interactive    = true
+markdown       = false       # set true to default-render markdown
 highlight-line = [10, 20]
 ```
 
@@ -165,6 +177,7 @@ Enters raw mode in the alternate screen. A `▶` glyph in the gutter marks the c
 | `Ctrl-u` | Half-page up |
 | `PageDown` | Full page down |
 | `PageUp` | Full page up |
+| `m` | Toggle rendered Markdown view ↔ raw source. Active when the file has a `.md` / `.markdown` / `.mdown` / `.mkd` extension, or when `--markdown` was passed on launch. Status bar shows `[md]` while in rendered mode. |
 | `q` / `Esc` / `Ctrl-c` | Quit |
 
 Restrictions:
@@ -192,6 +205,12 @@ If the top of your screen is hidden behind a terminal-host overlay (e.g. Warp), 
 ## Examples
 
 ```bash
+# Render a README in your terminal
+batty -m README.md
+
+# Mix: render markdown AND open it interactively (m toggles to raw)
+batty -m -i README.md
+
 # Highlight a Rhai script
 batty path/to/script.rhai
 

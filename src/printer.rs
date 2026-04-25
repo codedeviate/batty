@@ -65,6 +65,10 @@ pub struct PrinterConfig<'a> {
     /// is the reference point for relative line numbering.
     pub cursor: Option<usize>,
     pub line_numbers: LineNumberStyle,
+    /// Render the input as Markdown instead of as syntax-highlighted source.
+    /// When true, body decorations (numbers / changes / cursor / line range)
+    /// are skipped — markdown rendering produces its own block structure.
+    pub markdown: bool,
 }
 
 /// Compute the visible label for a line number given the configured style.
@@ -108,6 +112,11 @@ pub fn print<W: Write>(
         if cfg.style.grid {
             write_grid_top(out, cfg)?;
         }
+        let lang_label = if cfg.markdown {
+            "Markdown (rendered)"
+        } else {
+            cfg.language_name
+        };
         writeln!(
             out,
             "{}File:{} {}  {}{}{}",
@@ -115,7 +124,7 @@ pub fn print<W: Write>(
             if cfg.use_color { RESET } else { "" },
             input.display_name(),
             if cfg.use_color { DIM } else { "" },
-            cfg.language_name,
+            lang_label,
             if cfg.use_color { RESET } else { "" },
         )?;
         if cfg.style.grid {
@@ -123,6 +132,17 @@ pub fn print<W: Write>(
         }
     } else if cfg.style.grid {
         write_grid_top(out, cfg)?;
+    }
+
+    // Markdown short-circuit: skip the per-line body and emit the rendered
+    // Markdown directly. termimad respects the width we pass in.
+    if cfg.markdown {
+        let rendered = crate::markdown::render_to_string(contents, cfg.width);
+        out.write_all(rendered.as_bytes())?;
+        if cfg.style.grid {
+            write_grid_bot(out, cfg, line_no_width)?;
+        }
+        return Ok(());
     }
 
     // Body

@@ -125,6 +125,56 @@ fn relative_line_numbers_without_cursor_falls_back_to_absolute() {
 }
 
 #[test]
+fn markdown_flag_renders_md() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("doc.md");
+    std::fs::write(&f, "# Title\n\nSome **bold** text.\n").unwrap();
+    let out = batty()
+        .args(["--markdown", "--style=plain", "--color=always"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let s = String::from_utf8(out.stdout).unwrap();
+    // Rendered output should contain the heading text and the bold word,
+    // plus ANSI escapes (since --color=always).
+    assert!(s.contains("Title"), "output: {:?}", s);
+    assert!(s.contains("bold"), "output: {:?}", s);
+    assert!(s.contains("\x1b["), "expected ANSI escapes in: {:?}", s);
+    // The raw markdown markers should NOT appear unaltered (rendered output
+    // strips the literal `#` prefix, though `**` may be retained or stripped
+    // depending on termimad — assert at least the leading `# ` is gone).
+    assert!(!s.contains("# Title"), "raw heading should not appear: {:?}", s);
+}
+
+#[test]
+fn no_markdown_overrides_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = dir.path().join("config.toml");
+    std::fs::write(&cfg, "markdown = true\n").unwrap();
+    let f = dir.path().join("doc.md");
+    std::fs::write(&f, "# Title\n").unwrap();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_batty"))
+        .env("BATTY_CONFIG_PATH", &cfg)
+        .args(["--no-markdown", "--plain", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // With --no-markdown overriding the config, output is the raw source.
+    assert_eq!(String::from_utf8(out.stdout).unwrap(), "# Title\n");
+}
+
+#[test]
 fn paging_never_overrides_interactive_config() {
     // With `interactive = true` in config, `--paging=never` should be
     // treated as a 'flat output' signal that also disables interactive mode.

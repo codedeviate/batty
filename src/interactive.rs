@@ -66,10 +66,13 @@ pub fn run<'a>(
     tabs: usize,
     show_all: bool,
     top_pad: u16,
+    initial_markdown: bool,
+    can_toggle_markdown: bool,
 ) -> Result<()> {
     let total_lines = contents.lines().count().max(1);
     let mut cursor: usize = 1;
     let mut viewport_top: usize = 1;
+    let mut markdown_view: bool = initial_markdown;
 
     let _guard = TerminalGuard::enter()?;
 
@@ -101,6 +104,7 @@ pub fn run<'a>(
             term_h,
             total_lines,
             top_pad,
+            markdown_view,
         )?;
 
         match event::read()? {
@@ -140,6 +144,14 @@ pub fn run<'a>(
                     KeyCode::Char('u') if modifiers.contains(KeyModifiers::CONTROL) => {
                         cursor = cursor.saturating_sub(body_rows / 2).max(1);
                     }
+                    KeyCode::Char('m') => {
+                        // Allow toggling either when the file is markdown-detected
+                        // OR we're already in markdown view (so the user can flip
+                        // back even if they forced --markdown on a non-md file).
+                        if can_toggle_markdown || markdown_view {
+                            markdown_view = !markdown_view;
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -170,6 +182,7 @@ fn render_frame(
     term_h: usize,
     total_lines: usize,
     top_pad: u16,
+    markdown_view: bool,
 ) -> Result<()> {
     let mut highlighter = Highlighter::new(syntax, theme, syntax_set);
     let mut highlight_lines = std::collections::HashSet::new();
@@ -178,7 +191,7 @@ fn render_frame(
     let style = StyleFlags {
         header: false,
         grid: false,
-        numbers: true,
+        numbers: !markdown_view, // line numbers don't apply to rendered markdown
         rule: false,
         changes: false,
         snip: false,
@@ -186,10 +199,14 @@ fn render_frame(
 
     let cfg = PrinterConfig {
         style,
-        line_range: Some(LineRange {
-            start: viewport_top,
-            end: viewport_bot,
-        }),
+        line_range: if markdown_view {
+            None // markdown branch ignores line_range; render whole document
+        } else {
+            Some(LineRange {
+                start: viewport_top,
+                end: viewport_bot,
+            })
+        },
         highlight_lines,
         tabs,
         wrap: crate::cli::WrapMode::Auto,
@@ -197,8 +214,9 @@ fn render_frame(
         use_color: true,
         width: term_w,
         language_name: &syntax.name,
-        cursor: Some(cursor),
+        cursor: if markdown_view { None } else { Some(cursor) },
         line_numbers,
+        markdown: markdown_view,
     };
 
     // Render body to a buffer.
@@ -207,15 +225,17 @@ fn render_frame(
     print(&mut buf, &stub_input, contents, &mut highlighter, &cfg)?;
 
     // Compose status bar.
+    let mode_tag = if markdown_view { "[md]" } else { "" };
     let status_label = format!(
-        "  {}  line {}/{}  ({}, vim-keys: j/k g/G ^d/^u q quit)",
+        "  {}  line {}/{}  ({}){}  vim-keys: j/k g/G ^d/^u m q",
         file_label,
         cursor,
         total_lines,
         match line_numbers {
             LineNumberStyle::Absolute => "abs",
             LineNumberStyle::Relative => "rel",
-        }
+        },
+        if mode_tag.is_empty() { String::new() } else { format!("  {}", mode_tag) },
     );
     let status_truncated: String = status_label.chars().take(term_w).collect();
     let pad = term_w.saturating_sub(status_truncated.chars().count());

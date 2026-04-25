@@ -4,6 +4,7 @@ mod git;
 mod highlight;
 mod input;
 mod interactive;
+mod markdown;
 mod pager;
 mod printer;
 mod syntax;
@@ -116,6 +117,7 @@ fn run() -> Result<()> {
             language_name: &syntax.name,
             cursor,
             line_numbers: args.line_numbers,
+            markdown: args.markdown,
         };
         print(&mut stdout, input, &contents, &mut hl, &cfg)?;
         stdout.flush()?;
@@ -141,6 +143,11 @@ fn run_interactive(
     let syntax = syntax::detect_syntax(syntax_set, Some(&path), args.language.as_deref(), first_line);
     let theme = resolve_theme(theme_set, args.theme.as_deref());
 
+    // The `m` toggle is enabled when the file looks like markdown by extension,
+    // OR the user explicitly forced --markdown (so they can flip back to raw).
+    let is_md = markdown::is_markdown_path(&path);
+    let can_toggle = is_md || args.markdown;
+
     interactive::run(
         &input.display_name(),
         &contents,
@@ -151,6 +158,8 @@ fn run_interactive(
         args.tabs,
         args.show_all,
         args.top_pad,
+        args.markdown,
+        can_toggle,
     )
 }
 

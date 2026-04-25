@@ -92,6 +92,15 @@ pub struct Cli {
     /// terminals like Warp that overlay UI on the alternate screen's top rows.
     #[arg(long, default_value_t = 0)]
     pub top_pad: u16,
+
+    /// Render Markdown files instead of showing the raw source. Works for any
+    /// file but most useful for .md / .markdown.
+    #[arg(short = 'm', long, overrides_with = "no_markdown")]
+    pub markdown: bool,
+
+    /// Disable Markdown rendering. Overrides `markdown = true` in the config.
+    #[arg(long, overrides_with = "markdown")]
+    pub no_markdown: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
