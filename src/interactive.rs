@@ -55,6 +55,7 @@ pub fn scroll_viewport(
     top.min(max_top)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run<'a>(
     file_label: &str,
     contents: &str,
@@ -64,6 +65,7 @@ pub fn run<'a>(
     line_numbers: LineNumberStyle,
     tabs: usize,
     show_all: bool,
+    top_pad: u16,
 ) -> Result<()> {
     let total_lines = contents.lines().count().max(1);
     let mut cursor: usize = 1;
@@ -75,8 +77,11 @@ pub fn run<'a>(
         let (term_w, term_h) = size().unwrap_or((80, 24));
         let term_w = term_w as usize;
         let term_h = term_h as usize;
-        // Reserve last row for the status bar.
-        let body_rows = term_h.saturating_sub(1).max(1);
+        // Reserve last row for the status bar, and `top_pad` rows at the top
+        // (e.g., for Warp's overlay).
+        let body_rows = term_h
+            .saturating_sub(1 + top_pad as usize)
+            .max(1);
         viewport_top = scroll_viewport(cursor, viewport_top, body_rows, total_lines);
         let viewport_bot = (viewport_top + body_rows - 1).min(total_lines);
 
@@ -95,6 +100,7 @@ pub fn run<'a>(
             term_w,
             term_h,
             total_lines,
+            top_pad,
         )?;
 
         match event::read()? {
@@ -163,6 +169,7 @@ fn render_frame(
     term_w: usize,
     term_h: usize,
     total_lines: usize,
+    top_pad: u16,
 ) -> Result<()> {
     let mut highlighter = Highlighter::new(syntax, theme, syntax_set);
     let mut highlight_lines = std::collections::HashSet::new();
@@ -224,7 +231,7 @@ fn render_frame(
         crlf_buf.push(b);
     }
     let mut out = stdout().lock();
-    execute!(out, Clear(ClearType::All), MoveTo(0, 0))?;
+    execute!(out, Clear(ClearType::All), MoveTo(0, top_pad))?;
     out.write_all(&crlf_buf)?;
     execute!(
         out,

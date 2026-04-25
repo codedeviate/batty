@@ -82,6 +82,11 @@ pub struct Cli {
     /// Enter interactive TUI mode (vim-style navigation: j/k, g/G, Ctrl-d/u, q to quit)
     #[arg(short = 'i', long)]
     pub interactive: bool,
+
+    /// Reserve N rows at the top of the screen in interactive mode. Useful for
+    /// terminals like Warp that overlay UI on the alternate screen's top rows.
+    #[arg(long, default_value_t = 0)]
+    pub top_pad: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]

@@ -143,6 +143,7 @@ fn run_interactive(
         args.line_numbers,
         args.tabs,
         args.show_all,
+        args.top_pad,
     )
 }
 
