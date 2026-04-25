@@ -117,14 +117,3 @@ pub enum DecorationsWhen { Always, Auto, Never }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum LineNumberStyle { Absolute, Relative }
-
-impl Cli {
-    /// Parse from a custom args list (used for config-file merging)
-    pub fn parse_from_args<I, T>(args: I) -> Self
-    where
-        I: IntoIterator<Item = T>,
-        T: Into<std::ffi::OsString> + Clone,
-    {
-        Cli::parse_from(args)
-    }
-}

@@ -46,6 +46,7 @@ impl StyleFlags {
         s
     }
 
+    #[cfg(test)]
     pub fn any(&self) -> bool {
         self.header || self.grid || self.numbers || self.rule || self.changes || self.snip
     }
@@ -56,6 +57,9 @@ pub struct PrinterConfig<'a> {
     pub line_range: Option<LineRange>,
     pub highlight_lines: HashSet<usize>,
     pub tabs: usize,
+    /// Wrap-mode is parsed and threaded through but not yet honored.
+    /// Tracked in OUT-OF-SCOPE.md; remove the allow when wrapping is implemented.
+    #[allow(dead_code)]
     pub wrap: WrapMode,
     pub show_all: bool,
     pub use_color: bool,

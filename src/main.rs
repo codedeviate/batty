@@ -20,6 +20,17 @@ use std::io::Write;
 use std::path::PathBuf;
 
 fn main() {
+    // Reset SIGPIPE to its default disposition (terminate). Rust changes it
+    // to ignore in libstd, which means writing to a closed pipe (e.g., when
+    // the user pipes batty into `head -3`) returns an EPIPE error that gets
+    // surfaced as `batty: error: ... Broken pipe`. Restoring SIG_DFL makes
+    // the kernel terminate us silently when the reader goes away — same
+    // behavior as `cat`.
+    #[cfg(unix)]
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
     if let Err(e) = run() {
         eprintln!("batty: error: {:#}", e);
         std::process::exit(1);
@@ -164,13 +175,7 @@ fn run_interactive(
 }
 
 fn term_width() -> usize {
-    use std::process::Command;
-    if let Ok(out) = Command::new("tput").arg("cols").output() {
-        if out.status.success() {
-            if let Ok(s) = String::from_utf8(out.stdout) {
-                if let Ok(n) = s.trim().parse::<usize>() { return n; }
-            }
-        }
-    }
-    80
+    crossterm::terminal::size()
+        .map(|(w, _)| w as usize)
+        .unwrap_or(80)
 }
