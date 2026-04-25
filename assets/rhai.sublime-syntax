@@ -13,7 +13,9 @@ contexts:
       push: block_comment
     - match: '\b(let|const|fn|if|else|while|loop|for|in|break|continue|return|import|export|as|try|catch|throw|switch|default|private|do|until)\b'
       scope: keyword.control.rhai
-    - match: '\b(true|false|\(\))\b'
+    - match: '\b(true|false)\b'
+      scope: constant.language.rhai
+    - match: '\(\)'
       scope: constant.language.rhai
     - match: '\b(this|global)\b'
       scope: variable.language.rhai
@@ -35,7 +37,7 @@ contexts:
       scope: entity.name.function.rhai
     - match: '\b[A-Za-z_][A-Za-z0-9_]*\b'
       scope: variable.other.rhai
-    - match: '(\+|\-|\*|\/|%|==|!=|<=|>=|<|>|&&|\|\||!|=|\+=|\-=|\*=|\/=)'
+    - match: '(\+=|\-=|\*=|\/=|==|!=|<=|>=|&&|\|\||\+|\-|\*|\/|%|<|>|!|=)'
       scope: keyword.operator.rhai
   block_comment:
     - meta_scope: comment.block.rhai
