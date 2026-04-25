@@ -73,6 +73,10 @@ pub fn run<'a>(
     let mut cursor: usize = 1;
     let mut viewport_top: usize = 1;
     let mut markdown_view: bool = initial_markdown;
+    // Independent scroll position for the rendered markdown view: counted in
+    // *rendered* rows, not source lines, since termimad transforms structure.
+    // Clamped to a valid range inside render_frame each frame.
+    let mut markdown_scroll: usize = 0;
 
     let _guard = TerminalGuard::enter()?;
 
@@ -105,6 +109,7 @@ pub fn run<'a>(
             total_lines,
             top_pad,
             markdown_view,
+            &mut markdown_scroll,
         )?;
 
         match event::read()? {
@@ -117,32 +122,60 @@ pub fn run<'a>(
                 }
                 match code {
                     KeyCode::Char('j') | KeyCode::Down => {
-                        if cursor < total_lines {
+                        if markdown_view {
+                            markdown_scroll = markdown_scroll.saturating_add(1);
+                        } else if cursor < total_lines {
                             cursor += 1;
                         }
                     }
                     KeyCode::Char('k') | KeyCode::Up => {
-                        if cursor > 1 {
+                        if markdown_view {
+                            markdown_scroll = markdown_scroll.saturating_sub(1);
+                        } else if cursor > 1 {
                             cursor -= 1;
                         }
                     }
                     KeyCode::Char('g') | KeyCode::Home => {
-                        cursor = 1;
+                        if markdown_view {
+                            markdown_scroll = 0;
+                        } else {
+                            cursor = 1;
+                        }
                     }
                     KeyCode::Char('G') | KeyCode::End => {
-                        cursor = total_lines;
+                        if markdown_view {
+                            markdown_scroll = usize::MAX; // clamped in render_frame
+                        } else {
+                            cursor = total_lines;
+                        }
                     }
                     KeyCode::PageDown => {
-                        cursor = (cursor + body_rows).min(total_lines);
+                        if markdown_view {
+                            markdown_scroll = markdown_scroll.saturating_add(body_rows);
+                        } else {
+                            cursor = (cursor + body_rows).min(total_lines);
+                        }
                     }
                     KeyCode::PageUp => {
-                        cursor = cursor.saturating_sub(body_rows).max(1);
+                        if markdown_view {
+                            markdown_scroll = markdown_scroll.saturating_sub(body_rows);
+                        } else {
+                            cursor = cursor.saturating_sub(body_rows).max(1);
+                        }
                     }
                     KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => {
-                        cursor = (cursor + body_rows / 2).min(total_lines);
+                        if markdown_view {
+                            markdown_scroll = markdown_scroll.saturating_add(body_rows / 2);
+                        } else {
+                            cursor = (cursor + body_rows / 2).min(total_lines);
+                        }
                     }
                     KeyCode::Char('u') if modifiers.contains(KeyModifiers::CONTROL) => {
-                        cursor = cursor.saturating_sub(body_rows / 2).max(1);
+                        if markdown_view {
+                            markdown_scroll = markdown_scroll.saturating_sub(body_rows / 2);
+                        } else {
+                            cursor = cursor.saturating_sub(body_rows / 2).max(1);
+                        }
                     }
                     KeyCode::Char('m') => {
                         // Allow toggling either when the file is markdown-detected
@@ -150,6 +183,11 @@ pub fn run<'a>(
                         // back even if they forced --markdown on a non-md file).
                         if can_toggle_markdown || markdown_view {
                             markdown_view = !markdown_view;
+                            if markdown_view {
+                                // Reset scroll when entering rendered view so the
+                                // user always lands at the top of the document.
+                                markdown_scroll = 0;
+                            }
                         }
                     }
                     _ => {}
@@ -183,68 +221,87 @@ fn render_frame(
     total_lines: usize,
     top_pad: u16,
     markdown_view: bool,
+    markdown_scroll: &mut usize,
 ) -> Result<()> {
-    let mut highlighter = Highlighter::new(syntax, theme, syntax_set);
-    let mut highlight_lines = std::collections::HashSet::new();
-    highlight_lines.insert(cursor);
+    let body_rows = term_h
+        .saturating_sub(1 + top_pad as usize)
+        .max(1);
 
-    let style = StyleFlags {
-        header: false,
-        grid: false,
-        numbers: !markdown_view, // line numbers don't apply to rendered markdown
-        rule: false,
-        changes: false,
-        snip: false,
-    };
-
-    let cfg = PrinterConfig {
-        style,
-        line_range: if markdown_view {
-            None // markdown branch ignores line_range; render whole document
-        } else {
-            Some(LineRange {
+    // Build the body buffer + position label.
+    // - Markdown view renders the whole document via termimad, then slices a
+    //   visible window of *rendered rows* using markdown_scroll.
+    // - Raw view goes through the standard printer with line_range applied.
+    let (body_bytes, position_label): (Vec<u8>, String) = if markdown_view {
+        let full = crate::markdown::render_to_string(contents, term_w);
+        // Termimad emits rows separated by '\n'; each row is self-contained
+        // (its own escape opens/closes), so slicing on '\n' is safe.
+        let rows: Vec<&str> = full.split('\n').collect();
+        let total = rows.len().max(1);
+        // Clamp the caller's scroll into a valid window.
+        let max_scroll = total.saturating_sub(body_rows);
+        if *markdown_scroll > max_scroll {
+            *markdown_scroll = max_scroll;
+        }
+        let end = (*markdown_scroll + body_rows).min(total);
+        let visible = &rows[*markdown_scroll..end];
+        let body = visible.join("\n");
+        let label = format!("rendered {}/{}", *markdown_scroll + 1, total);
+        (body.into_bytes(), label)
+    } else {
+        let mut highlighter = Highlighter::new(syntax, theme, syntax_set);
+        let mut highlight_lines = std::collections::HashSet::new();
+        highlight_lines.insert(cursor);
+        let style = StyleFlags {
+            header: false,
+            grid: false,
+            numbers: true,
+            rule: false,
+            changes: false,
+            snip: false,
+        };
+        let cfg = PrinterConfig {
+            style,
+            line_range: Some(LineRange {
                 start: viewport_top,
                 end: viewport_bot,
-            })
-        },
-        highlight_lines,
-        tabs,
-        wrap: crate::cli::WrapMode::Auto,
-        show_all,
-        use_color: true,
-        width: term_w,
-        language_name: &syntax.name,
-        cursor: if markdown_view { None } else { Some(cursor) },
-        line_numbers,
-        markdown: markdown_view,
+            }),
+            highlight_lines,
+            tabs,
+            wrap: crate::cli::WrapMode::Auto,
+            show_all,
+            use_color: true,
+            width: term_w,
+            language_name: &syntax.name,
+            cursor: Some(cursor),
+            line_numbers,
+            markdown: false,
+        };
+        let mut buf: Vec<u8> = Vec::with_capacity(term_w * term_h);
+        let stub_input = crate::input::InputKind::Stdin;
+        print(&mut buf, &stub_input, contents, &mut highlighter, &cfg)?;
+        (buf, format!("line {}/{}", cursor, total_lines))
     };
 
-    // Render body to a buffer.
-    let mut buf: Vec<u8> = Vec::with_capacity(term_w * term_h);
-    let stub_input = crate::input::InputKind::Stdin; // diff disabled via style.changes=false
-    print(&mut buf, &stub_input, contents, &mut highlighter, &cfg)?;
-
-    // Compose status bar.
-    let mode_tag = if markdown_view { "[md]" } else { "" };
+    // Status bar — always shows mode tag and key hints; position depends on view.
+    let mode_tag = if markdown_view { "  [md]" } else { "" };
     let status_label = format!(
-        "  {}  line {}/{}  ({}){}  vim-keys: j/k g/G ^d/^u m q",
+        "  {}  {}  ({}){}  vim-keys: j/k g/G ^d/^u m q",
         file_label,
-        cursor,
-        total_lines,
+        position_label,
         match line_numbers {
             LineNumberStyle::Absolute => "abs",
             LineNumberStyle::Relative => "rel",
         },
-        if mode_tag.is_empty() { String::new() } else { format!("  {}", mode_tag) },
+        mode_tag,
     );
     let status_truncated: String = status_label.chars().take(term_w).collect();
     let pad = term_w.saturating_sub(status_truncated.chars().count());
 
-    // Atomic-ish write: clear screen, move to (0,0), write body, then status bar.
+    // Atomic-ish write: clear screen, move to (0,top_pad), write body, then status bar.
     // In raw mode, '\n' only moves the cursor down without returning to column 0,
     // which causes a staircase. Translate '\n' → '\r\n' so each line starts fresh.
-    let mut crlf_buf: Vec<u8> = Vec::with_capacity(buf.len() + 64);
-    for &b in &buf {
+    let mut crlf_buf: Vec<u8> = Vec::with_capacity(body_bytes.len() + 64);
+    for &b in &body_bytes {
         if b == b'\n' {
             crlf_buf.push(b'\r');
         }
