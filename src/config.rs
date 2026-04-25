@@ -1,15 +1,23 @@
 use std::fs;
 use std::path::PathBuf;
 
-/// Resolve the config file path. We always use `~/.config/batty/config`
-/// (XDG-style) on every platform — including macOS, where `dirs::config_dir()`
-/// would return `~/Library/Application Support`. This matches bat's behavior
-/// and gives users a single, predictable location.
+/// Resolve the config file path. Always `~/.config/batty/config.toml`
+/// (XDG-style) on every platform — including macOS, where
+/// `dirs::config_dir()` would return `~/Library/Application Support`.
 pub fn config_path() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".config").join("batty").join("config"))
+    dirs::home_dir().map(|h| h.join(".config").join("batty").join("config.toml"))
 }
 
-/// Load config args from a specific file path. Returns empty Vec if file is absent.
+/// Load config args from a specific TOML file. Returns empty Vec if absent.
+/// Each top-level key is converted to a CLI argv token:
+///
+/// - `theme = "Dracula"`         → `--theme=Dracula`
+/// - `top-pad = 2`               → `--top-pad=2`
+/// - `interactive = true`        → `--interactive`
+/// - `interactive = false`       → (omitted)
+/// - `highlight-line = [10, 20]` → `--highlight-line=10 --highlight-line=20`
+///
+/// Nested tables and unsupported value types are ignored with a warning.
 pub fn load_args_from(path: &std::path::Path) -> Vec<String> {
     let contents = match fs::read_to_string(path) {
         Ok(c) => c,
@@ -19,12 +27,59 @@ pub fn load_args_from(path: &std::path::Path) -> Vec<String> {
             return vec![];
         }
     };
-    contents
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(String::from)
-        .collect()
+    let table: toml::Table = match contents.parse() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!(
+                "batty: warning: ignoring config {} (TOML parse error): {}",
+                path.display(),
+                e
+            );
+            return vec![];
+        }
+    };
+    table_to_args(&table)
+}
+
+fn table_to_args(table: &toml::Table) -> Vec<String> {
+    let mut out = Vec::with_capacity(table.len() * 2);
+    for (key, value) in table {
+        match value {
+            toml::Value::Boolean(true) => out.push(format!("--{}", key)),
+            toml::Value::Boolean(false) => {}
+            toml::Value::Array(arr) => {
+                for item in arr {
+                    if let Some(s) = scalar_to_string(item) {
+                        out.push(format!("--{}={}", key, s));
+                    } else {
+                        eprintln!(
+                            "batty: warning: config key '{}' has unsupported array element; skipping",
+                            key
+                        );
+                    }
+                }
+            }
+            v => match scalar_to_string(v) {
+                Some(s) => out.push(format!("--{}={}", key, s)),
+                None => eprintln!(
+                    "batty: warning: config key '{}' has unsupported value type; skipping",
+                    key
+                ),
+            },
+        }
+    }
+    out
+}
+
+fn scalar_to_string(v: &toml::Value) -> Option<String> {
+    match v {
+        toml::Value::String(s) => Some(s.clone()),
+        toml::Value::Integer(i) => Some(i.to_string()),
+        toml::Value::Float(f) => Some(f.to_string()),
+        toml::Value::Boolean(b) => Some(b.to_string()),
+        toml::Value::Datetime(d) => Some(d.to_string()),
+        _ => None,
+    }
 }
 
 /// Load config args from the default location.
@@ -37,16 +92,45 @@ mod tests {
     use super::*;
     use std::io::Write;
 
-    #[test]
-    fn one_token_per_line() {
+    fn write_toml(contents: &str) -> tempfile::NamedTempFile {
         let mut f = tempfile::NamedTempFile::new().unwrap();
-        writeln!(f, "--theme=Dracula").unwrap();
-        writeln!(f, "# a comment").unwrap();
-        writeln!(f, "").unwrap();
-        writeln!(f, "--tabs").unwrap();
-        writeln!(f, "2").unwrap();
+        f.write_all(contents.as_bytes()).unwrap();
+        f
+    }
+
+    #[test]
+    fn parses_string_and_int() {
+        let f = write_toml(r#"
+            theme = "Dracula"
+            tabs = 2
+        "#);
+        let mut args = load_args_from(f.path());
+        args.sort();
+        assert_eq!(args, vec!["--tabs=2", "--theme=Dracula"]);
+    }
+
+    #[test]
+    fn boolean_true_emits_flag_only() {
+        let f = write_toml("interactive = true\n");
         let args = load_args_from(f.path());
-        assert_eq!(args, vec!["--theme=Dracula", "--tabs", "2"]);
+        assert_eq!(args, vec!["--interactive"]);
+    }
+
+    #[test]
+    fn boolean_false_is_omitted() {
+        let f = write_toml("interactive = false\n");
+        let args = load_args_from(f.path());
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn array_expands_to_repeated_flags() {
+        let f = write_toml("highlight-line = [10, 20, 30]\n");
+        let args = load_args_from(f.path());
+        assert_eq!(
+            args,
+            vec!["--highlight-line=10", "--highlight-line=20", "--highlight-line=30"]
+        );
     }
 
     #[test]
@@ -56,25 +140,25 @@ mod tests {
     }
 
     #[test]
-    fn comment_only_file_returns_empty() {
-        let mut f = tempfile::NamedTempFile::new().unwrap();
-        writeln!(f, "# only comments").unwrap();
-        writeln!(f, "# more comments").unwrap();
+    fn malformed_toml_returns_empty_with_warning() {
+        let f = write_toml("not = valid = toml\n");
         let args = load_args_from(f.path());
         assert!(args.is_empty());
     }
 
     #[test]
-    fn blank_file_returns_empty() {
-        let f = tempfile::NamedTempFile::new().unwrap();
+    fn comments_and_whitespace_are_fine() {
+        let f = write_toml(r#"
+            # this is a comment
+            theme = "Nord"   # inline comment
+        "#);
         let args = load_args_from(f.path());
-        assert!(args.is_empty());
+        assert_eq!(args, vec!["--theme=Nord"]);
     }
 
     #[test]
     fn preserves_value_with_spaces() {
-        let mut f = tempfile::NamedTempFile::new().unwrap();
-        writeln!(f, "--theme=Solarized Dark").unwrap();
+        let f = write_toml(r#"theme = "Solarized Dark""#);
         let args = load_args_from(f.path());
         assert_eq!(args, vec!["--theme=Solarized Dark"]);
     }

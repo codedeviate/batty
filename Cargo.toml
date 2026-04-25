@@ -16,6 +16,7 @@ anstyle-query = "1"
 dirs          = "5"
 anyhow        = "1"
 crossterm = "0.28"
+toml = { version = "0.8", default-features = false, features = ["parse"] }
 
 [dev-dependencies]
 tempfile = "3"
