@@ -46,19 +46,24 @@ pub struct LineRange {
 
 impl LineRange {
     pub fn parse(s: &str) -> Result<Self> {
-        let parts: Vec<&str> = s.splitn(2, ':').collect();
-        match parts.as_slice() {
-            [a] => {
-                let n: usize = a.parse().context("invalid line range")?;
-                Ok(LineRange { start: n, end: n })
+        let (start, end) = match s.split_once(':') {
+            None => {
+                let n: usize = s.parse().context("invalid line range")?;
+                (n, n)
             }
-            [a, b] => {
-                let start = if a.is_empty() { 1 } else { a.parse().context("invalid start")? };
-                let end = if b.is_empty() { usize::MAX } else { b.parse().context("invalid end")? };
-                Ok(LineRange { start, end })
+            Some((a, b)) => {
+                let start = if a.is_empty() { 1 } else { a.parse().context("invalid start in line range")? };
+                let end = if b.is_empty() { usize::MAX } else { b.parse().context("invalid end in line range")? };
+                (start, end)
             }
-            _ => unreachable!(),
+        };
+        if start == 0 || end == 0 {
+            anyhow::bail!("line numbers are 1-indexed; got {}", s);
         }
+        if start > end {
+            anyhow::bail!("invalid line range: start {} > end {}", start, end);
+        }
+        Ok(LineRange { start, end })
     }
 
     pub fn contains(&self, line: usize) -> bool {
@@ -102,5 +107,30 @@ mod tests {
         assert!(r.contains(20));
         assert!(!r.contains(9));
         assert!(!r.contains(21));
+    }
+
+    #[test]
+    fn rejects_zero() {
+        assert!(LineRange::parse("0").is_err());
+        assert!(LineRange::parse("0:5").is_err());
+        assert!(LineRange::parse("5:0").is_err());
+    }
+
+    #[test]
+    fn rejects_inverted_range() {
+        assert!(LineRange::parse("20:10").is_err());
+    }
+
+    #[test]
+    fn rejects_garbage() {
+        assert!(LineRange::parse("abc").is_err());
+        assert!(LineRange::parse("").is_err());
+        assert!(LineRange::parse("10:abc").is_err());
+    }
+
+    #[test]
+    fn open_open_matches_all() {
+        let r = LineRange::parse(":").unwrap();
+        assert_eq!((r.start, r.end), (1, usize::MAX));
     }
 }
