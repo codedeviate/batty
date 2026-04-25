@@ -1,0 +1,240 @@
+# batty
+
+A from-scratch Rust clone of [`bat`](https://github.com/sharkdp/bat) — `cat` with syntax highlighting, git diff markers, and a pager. Plus:
+
+- **Bundled Rhai grammar** — `.rhai` scripts highlight out of the box.
+- **Interactive TUI mode** (`-i`) — vim-style navigation, line by line.
+- **Vim-style relative line numbers** — center distances on a cursor.
+- **TOML config** — `~/.config/batty/config.toml`.
+- **Small release binary** — ~2.6 MB with full grammar/theme bundles.
+
+Targets macOS and Linux.
+
+---
+
+## Installation
+
+```bash
+git clone <repo> batty && cd batty
+cargo build --release
+# Binary lands at target/release/batty
+```
+
+Move it onto your `$PATH` however you like (e.g. `cp target/release/batty ~/.local/bin/`).
+
+---
+
+## Quick start
+
+```bash
+batty src/main.rs                    # full decorations
+batty -p src/main.rs                 # plain output
+batty -i src/main.rs                 # interactive TUI
+batty --line-range 10:30 file.rs     # only lines 10–30
+echo 'fn main() {}' | batty -l rust  # stdin with language hint
+batty --diff modified_file.rs        # gutter diff markers
+batty --list-languages               # show all bundled languages
+batty --list-themes                  # show all bundled themes
+```
+
+---
+
+## Flag reference
+
+`batty` accepts the flags below. Many can also be set in the [config file](#config-file).
+
+### Input
+
+| Flag | Description |
+|---|---|
+| `<FILES>...` | One or more files. Use `-` for stdin (default when no files given). |
+| `-l, --language <NAME>` | Override syntax detection. Use any name shown by `--list-languages`. |
+
+### Display
+
+| Flag | Description |
+|---|---|
+| `-p, --plain` | No decorations (header / grid / numbers / changes). Equivalent to `--style=plain`. |
+| `-n, --number` | Show line numbers. Equivalent to `--style=numbers`. |
+| `-d, --diff` | Show git diff markers in the gutter (`+` / `~` / `-`). |
+| `--diff-context <N>` | Lines of context for diff display. *Default: 2.* (Parsed but currently doesn't filter to changed regions; see [Limitations](#limitations).) |
+| `-A, --show-all` | Show non-printable characters: `→` for tab, `·` for space, `•` for control chars. |
+| `--style <SPEC>` | Comma-separated style components: `full`, `plain`, `numbers`, `grid`, `header`, `rule`, `changes`, `snip`. *Default: `full`.* |
+| `--line-range <RANGE>` | Show only the given range, e.g. `10:20`, `:15`, `30:`, `42`. Rejects `0` and inverted ranges. |
+| `-H, --highlight-line <N>` | Highlight specific line(s) with inverse video. Repeatable. The first one acts as the **cursor reference** for relative numbering. |
+| `--tabs <N>` | Tab expansion width. *Default: 4.* |
+| `--wrap <MODE>` | `never` / `character` / `auto`. *Default: `auto`.* (Parsed but currently a no-op; terminals already wrap.) |
+| `--decorations <WHEN>` | `always` / `auto` / `never`. *Default: `auto`.* `never` collapses to plain output. |
+
+### Theme & color
+
+| Flag | Description |
+|---|---|
+| `--theme <NAME>` | Color theme. Default: `Monokai Extended`. See `--list-themes`. |
+| `--color <WHEN>` | `always` / `auto` / `never`. *Default: `auto`.* `auto` enables color when stdout is a TTY and `NO_COLOR` is unset. |
+| `--line-numbers <STYLE>` | `absolute` (default) or `relative`. With `relative`, the cursor line shows its absolute number, others show distance. Falls back to `absolute` if no cursor is set. |
+
+### Interactive mode
+
+| Flag | Description |
+|---|---|
+| `-i, --interactive` | Enter the TUI. See [Interactive mode](#interactive-mode) for keys. |
+| `--no-interactive` | Disable interactive mode. Overrides `interactive = true` in the config. |
+| `--top-pad <N>` | Reserve N rows at the top of the screen. *Default: 0.* Use `2` in [Warp](https://www.warp.dev/) to dodge its UI overlay. |
+
+### Pager
+
+| Flag | Description |
+|---|---|
+| `--paging <WHEN>` | `always` / `auto` / `never`. *Default: `auto`.* Uses `$PAGER` or `less -RF`. **`never` also disables interactive mode** — treat it as a global "flat output" override. |
+
+### Discovery
+
+| Flag | Description |
+|---|---|
+| `-L, --list-languages` | Print every supported language (one per line) and exit. |
+| `--list-themes` | Print every bundled theme and exit. |
+| `-h, --help` | Short help. |
+| `--help` | Long help with full descriptions. |
+| `-V, --version` | Print version. |
+
+### Flag-conflict semantics
+
+- All boolean flags use `overrides_with` so config + CLI can both set a flag without `cannot be used multiple times` errors.
+- `--interactive` and `--no-interactive` are mutual overrides — last occurrence wins.
+- `--paging=never` implies `--no-interactive`.
+
+---
+
+## Config file
+
+`~/.config/batty/config.toml` (XDG-style on every platform, including macOS).
+
+Top-level keys mirror CLI long flag names with hyphens preserved:
+
+```toml
+# ~/.config/batty/config.toml
+theme          = "Dracula"
+tabs           = 2
+top-pad        = 2
+line-numbers   = "relative"
+interactive    = true
+highlight-line = [10, 20]
+```
+
+### Mapping rules
+
+| TOML | argv |
+|---|---|
+| `key = "string"` | `--key=string` |
+| `key = 42` | `--key=42` |
+| `key = true` | `--key` |
+| `key = false` | (omitted) |
+| `key = [a, b]` | `--key=a --key=b` |
+
+- Comments (`#`) are allowed.
+- Malformed TOML logs a warning to stderr and proceeds without config.
+- Unknown keys are forwarded to clap, which rejects them with a clear error — typos surface as `unrecognized argument`.
+
+### `BATTY_CONFIG_PATH`
+
+Set this env var to override the default location:
+
+```bash
+BATTY_CONFIG_PATH=/path/to/other.toml batty foo.rs
+BATTY_CONFIG_PATH=/dev/null batty foo.rs            # opt out of any config
+```
+
+---
+
+## Interactive mode
+
+```bash
+batty -i src/main.rs
+```
+
+Enters raw mode in the alternate screen. A `▶` glyph in the gutter marks the cursor line; the bottom row is a status bar (`file  line N/M  (abs|rel mode)  vim-keys: ...  q quit`).
+
+| Key | Action |
+|---|---|
+| `j` / `Down` | Cursor down one line |
+| `k` / `Up` | Cursor up one line |
+| `g` / `Home` | Jump to first line |
+| `G` / `End` | Jump to last line |
+| `Ctrl-d` | Half-page down |
+| `Ctrl-u` | Half-page up |
+| `PageDown` | Full page down |
+| `PageUp` | Full page up |
+| `q` / `Esc` / `Ctrl-c` | Quit |
+
+Restrictions:
+
+- One file at a time — multiple files are rejected with an error.
+- No stdin input — interactive mode requires a real file path.
+- Pager is bypassed.
+- Color is forced on (interactive mode in a TTY always wants color).
+
+If the top of your screen is hidden behind a terminal-host overlay (e.g. Warp), pass `--top-pad=2` (or whatever number works) — or set `top-pad = 2` in your config.
+
+---
+
+## Environment variables
+
+| Variable | Effect |
+|---|---|
+| `BATTY_CONFIG_PATH` | Override the config file path. `/dev/null` disables config entirely. |
+| `PAGER` | Pager binary (default `less`). |
+| `LESS` | Pager arguments. batty sets `LESS=-RF` if unset before spawning the pager. |
+| `NO_COLOR` | When set (any value), disables color output in `--color=auto` mode. |
+
+---
+
+## Examples
+
+```bash
+# Highlight a Rhai script
+batty path/to/script.rhai
+
+# Show lines 50–80 with line numbers, no other decorations
+batty --style=numbers --line-range 50:80 src/lib.rs
+
+# Cursor-centric relative numbering for line 42
+batty --line-numbers=relative --highlight-line=42 src/main.rs
+
+# Show only the modified portion of a file with diff markers
+batty --diff src/main.rs
+
+# Render plain text from stdin as Python
+cat data.py | batty --language python --plain
+
+# Force interactive even though config says interactive = false
+batty -i README.md
+
+# One-off non-interactive run despite `interactive = true` in config
+batty --no-interactive README.md
+batty --paging=never README.md     # equivalent
+
+# Skip the user's config for one run
+BATTY_CONFIG_PATH=/dev/null batty README.md
+
+# List bundled themes
+batty --list-themes
+```
+
+---
+
+## Limitations
+
+These are deliberately deferred (parsed but inert, never crashing):
+
+- `--wrap` doesn't actively wrap long lines (terminals already wrap).
+- `--diff-context` doesn't restrict output to changed regions; it only sets the diff window passed to git2.
+- `rule` and `snip` style components don't render an inter-file separator.
+- No Windows support (uses `tput`, POSIX pager, etc.).
+- Interactive mode is keyboard-only: no search, no mouse, no persistent cursor across runs.
+
+---
+
+## License
+
+MIT.
