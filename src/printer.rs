@@ -139,10 +139,23 @@ pub fn print<W: Write>(
     }
 
     // Markdown short-circuit: skip the per-line body and emit the rendered
-    // Markdown directly. termimad respects the width we pass in.
+    // Markdown directly. The per-row gutter (line numbers, optional grid bar)
+    // shows the source-line of each block on its first row, so users can
+    // cross-reference rendered prose to source positions.
     if cfg.markdown {
-        let rendered = crate::markdown::render_to_string(contents, cfg.width);
-        out.write_all(rendered.as_bytes())?;
+        let r = crate::markdown::render_with_gutter(
+            contents,
+            cfg.width,
+            line_no_width,
+            cfg.style.numbers,
+            cfg.style.grid,
+            cfg.use_color,
+        );
+        out.write_all(r.text.as_bytes())?;
+        // Ensure the body ends with a newline before any trailing grid_bot.
+        if !r.text.ends_with('\n') {
+            writeln!(out)?;
+        }
         if cfg.style.grid {
             write_grid_bot(out, cfg, line_no_width)?;
         }

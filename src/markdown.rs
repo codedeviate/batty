@@ -1,4 +1,8 @@
+use std::collections::HashSet;
 use std::path::Path;
+
+const RESET: &str = "\x1b[0m";
+const DIM: &str = "\x1b[2m";
 
 /// A markdown render plus a map from rendered-row index back to source-line.
 pub struct RenderedMarkdown {
@@ -89,15 +93,23 @@ pub fn render_with_map(source: &str, width: usize) -> RenderedMarkdown {
         let chunk_out = skin.text(chunk_src, Some(render_width)).to_string();
 
         map.push((rendered_row, source_line));
-        let row_count = chunk_out.matches('\n').count() + if chunk_out.is_empty() { 0 } else { 1 };
+        // Row count: empty → 0; ends with \n → newline count is exactly the
+        // row count (each \n terminates a row); else → newline count + 1
+        // (a final partial row without terminator).
+        let row_count = if chunk_out.is_empty() {
+            0
+        } else if chunk_out.ends_with('\n') {
+            chunk_out.matches('\n').count()
+        } else {
+            chunk_out.matches('\n').count() + 1
+        };
         text.push_str(&chunk_out);
-        // Ensure block separator: a single newline between adjacent block
-        // chunks if the chunk didn't end in one. termimad usually ends with
-        // a newline, so this is mostly a safety net.
-        if !chunk_out.ends_with('\n') && !chunk_out.is_empty() {
+        // Ensure block separator: insert a \n if the chunk didn't end in one.
+        // termimad usually ends each block with a newline, so this rarely fires.
+        if !chunk_out.is_empty() && !chunk_out.ends_with('\n') {
             text.push('\n');
         }
-        rendered_row = rendered_row.saturating_add(row_count.max(1));
+        rendered_row = rendered_row.saturating_add(row_count);
     }
 
     RenderedMarkdown { text, map }
@@ -108,6 +120,95 @@ pub fn render_with_map(source: &str, width: usize) -> RenderedMarkdown {
 /// `render_with_map` that drops the source-line map.
 pub fn render_to_string(source: &str, width: usize) -> String {
     render_with_map(source, width).text
+}
+
+/// A rendered markdown with a per-row gutter prefix (source-line numbers +
+/// optional grid bar). The gutter columns are already baked into `text`.
+pub struct RenderedMarkdownWithGutter {
+    pub text: String,
+    pub map: Vec<(usize, usize)>,
+    /// Visible columns the gutter consumes per row. Matches the prefix
+    /// width that `text` carries.
+    pub gutter_width: usize,
+}
+
+/// Render markdown for a target terminal width with a per-row gutter showing
+/// source-line numbers (on each block's first row only) and an optional grid
+/// bar. The body is rendered at `term_w - gutter_width` so the total row fits.
+///
+/// `line_no_width` is typically `total_source_lines.to_string().len().max(4)`.
+/// `show_numbers` and `show_grid` gate the corresponding gutter components.
+/// `use_color` controls whether the line-number column is dimmed via ANSI.
+pub fn render_with_gutter(
+    source: &str,
+    term_w: usize,
+    line_no_width: usize,
+    show_numbers: bool,
+    show_grid: bool,
+    use_color: bool,
+) -> RenderedMarkdownWithGutter {
+    let gutter_width = (if show_numbers { line_no_width + 1 } else { 0 })
+        + (if show_grid { 2 } else { 0 });
+
+    if gutter_width == 0 {
+        // No gutter requested — render at full width, return text as-is.
+        let r = render_with_map(source, term_w);
+        return RenderedMarkdownWithGutter {
+            text: r.text,
+            map: r.map,
+            gutter_width: 0,
+        };
+    }
+
+    let body_width = term_w.saturating_sub(gutter_width).max(20);
+    let rendered = render_with_map(source, body_width);
+
+    // O(1) lookup: which rendered-row indices are block starts?
+    let block_starts: HashSet<usize> = rendered.map.iter().map(|(r, _)| *r).collect();
+    // Build a parallel slice for source-line lookups.
+    let map = rendered.map.clone();
+
+    // Walk rows; prefix each.
+    let rows: Vec<&str> = rendered.text.split('\n').collect();
+    let mut out = String::with_capacity(rendered.text.len() + rows.len() * gutter_width);
+    let last = rows.len().saturating_sub(1);
+    for (idx, row) in rows.iter().enumerate() {
+        // Number cell.
+        if show_numbers {
+            if block_starts.contains(&idx) {
+                let src_line = source_line_for_rendered(&map, idx);
+                let label = format!("{:>width$}", src_line, width = line_no_width);
+                if use_color {
+                    out.push_str(DIM);
+                    out.push_str(&label);
+                    out.push_str(RESET);
+                } else {
+                    out.push_str(&label);
+                }
+                out.push(' ');
+            } else {
+                // Continuation row: blank line-number column.
+                for _ in 0..(line_no_width + 1) {
+                    out.push(' ');
+                }
+            }
+        }
+        // Grid cell.
+        if show_grid {
+            out.push_str("│ ");
+        }
+        // Body row.
+        out.push_str(row);
+        if idx < last {
+            out.push('\n');
+        }
+    }
+
+    RenderedMarkdownWithGutter {
+        text: out,
+        map,
+        gutter_width,
+    }
 }
 
 /// Given a 1-indexed source line, find the rendered-row offset to scroll to.
@@ -275,5 +376,70 @@ mod tests {
         assert!(!is_markdown_path(&PathBuf::from("main.rs")));
         assert!(!is_markdown_path(&PathBuf::from("README")));
         assert!(!is_markdown_path(&PathBuf::from("config.toml")));
+    }
+
+    #[test]
+    fn render_with_gutter_off_when_neither_flag() {
+        let src = "# Title\n\nA paragraph.\n";
+        let plain = render_with_map(src, 80).text;
+        let r = render_with_gutter(src, 80, 4, false, false, false);
+        assert_eq!(r.gutter_width, 0);
+        assert_eq!(r.text, plain);
+    }
+
+    #[test]
+    fn render_with_gutter_width_accounting() {
+        // numbers (line_no_width=4 + 1 sep) + grid (2) = 7
+        let r = render_with_gutter("# Title\n", 80, 4, true, true, false);
+        assert_eq!(r.gutter_width, 7);
+        // numbers only: 4 + 1 = 5
+        let r = render_with_gutter("# Title\n", 80, 4, true, false, false);
+        assert_eq!(r.gutter_width, 5);
+        // grid only: 2
+        let r = render_with_gutter("# Title\n", 80, 4, false, true, false);
+        assert_eq!(r.gutter_width, 2);
+    }
+
+    #[test]
+    fn render_with_gutter_prefixes_block_starts() {
+        // 3 blocks at source lines 1, 3, 5.
+        let src = "# Title\n\nA paragraph.\n\n- Item one\n- Item two\n";
+        let r = render_with_gutter(src, 80, 4, true, false, false);
+        // Each row in the output starts with a 5-char gutter ('NNNN '). Block
+        // starts have a number; continuations have spaces. Iterate rows and
+        // check that exactly the rows in r.map have non-blank line numbers.
+        let starts: std::collections::HashSet<usize> =
+            r.map.iter().map(|(rr, _)| *rr).collect();
+        for (idx, row) in r.text.split('\n').enumerate() {
+            let prefix: String = row.chars().take(5).collect();
+            if starts.contains(&idx) {
+                // Should contain at least one digit in the line-number cell.
+                assert!(
+                    prefix.trim().chars().any(|c| c.is_ascii_digit()),
+                    "block-start row {} missing line number; prefix={:?}",
+                    idx, prefix
+                );
+            } else {
+                assert!(
+                    prefix.trim().is_empty(),
+                    "continuation row {} has unexpected number; prefix={:?}",
+                    idx, prefix
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn render_with_gutter_grid_repeats_on_every_row() {
+        let src = "# Title\n\nA paragraph.\n";
+        let r = render_with_gutter(src, 80, 4, true, true, false);
+        // Every row should contain '│' (grid bar).
+        for (idx, row) in r.text.split('\n').enumerate() {
+            assert!(
+                row.contains('│'),
+                "row {} missing grid bar: {:?}",
+                idx, row
+            );
+        }
     }
 }

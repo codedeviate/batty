@@ -295,11 +295,17 @@ fn render_frame(
     //   markdown_scroll.
     // - Raw view goes through the standard printer with line_range applied.
     let (body_bytes, position_label): (Vec<u8>, String) = if markdown_view {
-        let rendered = crate::markdown::render_with_map(contents, term_w);
+        let line_no_width = total_lines.to_string().len().max(4);
+        let rendered = crate::markdown::render_with_gutter(
+            contents,
+            term_w,
+            line_no_width,
+            gutter_visible, // numbers track the n-key toggle
+            false,          // no grid in interactive mode
+            true,           // interactive is always color
+        );
         // Cache the map for m-toggle scroll preservation.
         *markdown_map = Some(rendered.map.clone());
-        // Termimad emits rows separated by '\n'; each row is self-contained
-        // (its own escape opens/closes), so slicing on '\n' is safe.
         let rows: Vec<&str> = rendered.text.split('\n').collect();
         let total = rows.len().max(1);
         let max_scroll = total.saturating_sub(body_rows);

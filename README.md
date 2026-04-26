@@ -87,7 +87,7 @@ batty --list-themes                  # show all bundled themes
 | `--markdown-on-extension` | Render as Markdown only when the file extension is `.md` / `.markdown` / `.mdown` / `.mkd`. Lower priority than `--markdown` (which forces on for any file) and `--no-markdown` (which disables). Useful as a config default — set `markdown-on-extension = true` and `.md` files auto-render while source files stay raw. |
 | `--no-markdown` | Disable Markdown rendering. Overrides `markdown = true` and `markdown-on-extension = true` in the config. |
 
-When `--markdown` is on, per-line decorations (line numbers, diff markers, cursor indicator, line range filtering) are skipped — Markdown rendering produces its own block structure where they don't apply. The header still prints with the language label `Markdown (rendered)`.
+When `--markdown` is on, the gutter shows the **source-line number** of each top-level block on its first rendered row, with continuation rows blank in the gutter (matching how raw view handles wrapped lines). The grid bar repeats on every row when `--style` includes `grid`. Use `--no-gutter` to strip the gutter and read flush against the left margin. Diff markers (`changes`) and the cursor glyph (`▶`) don't appear in markdown view — block-granular mapping doesn't make them meaningful, and the status bar covers position info in interactive mode. The header prints with the language label `Markdown (rendered)`.
 
 ### Interactive mode
 

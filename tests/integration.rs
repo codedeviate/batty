@@ -363,6 +363,43 @@ fn follow_and_interactive_are_mutually_exclusive() {
 }
 
 #[test]
+fn markdown_with_numbers_shows_source_line_in_gutter() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("doc.md");
+    // Three blocks at known source lines: title (1), paragraph (3), list (5).
+    std::fs::write(&f, "# Title\n\nA paragraph.\n\n- item one\n").unwrap();
+    let out = batty()
+        .args(["--markdown", "--style=numbers,grid", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    // Block source lines (1, 3, 5) should appear before grid bars in the
+    // gutter. Use a loose contains() since termimad varies whitespace.
+    assert!(s.contains("│"), "expected grid bar: {}", s);
+    assert!(s.contains("1 │") || s.contains("   1 │"), "missing source-line 1: {}", s);
+    assert!(s.contains("3 │") || s.contains("   3 │"), "missing source-line 3: {}", s);
+    assert!(s.contains("5 │") || s.contains("   5 │"), "missing source-line 5: {}", s);
+}
+
+#[test]
+fn markdown_with_no_gutter_suppresses_gutter() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("doc.md");
+    std::fs::write(&f, "# Title\n\nParagraph.\n").unwrap();
+    let out = batty()
+        .args(["--markdown", "--no-gutter", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    // No grid bar with --no-gutter active.
+    assert!(!s.contains("│"), "expected no grid bar: {}", s);
+}
+
+#[test]
 fn no_gutter_strips_numbers_and_grid_keeps_header() {
     let dir = tempfile::tempdir().unwrap();
     let f = dir.path().join("a.txt");
