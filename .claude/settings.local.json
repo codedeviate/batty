@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rtk ls *)",
+      "Bash(cargo init *)",
+      "Bash(rtk cargo *)",
+      "Bash(rtk git *)",
+      "Bash(cargo clean *)",
+      "Bash(cargo --version)",
+      "Bash(rustc --version)",
+      "Bash(cargo run *)",
+      "Bash(rtk grep *)",
+      "Bash(python3 -c \"import yaml; yaml.safe_load\\(open\\('assets/rhai.sublime-syntax'\\)\\)\")",
+      "Bash(rtk pip *)",
+      "Bash(yq eval *)",
+      "Bash(ruby *)",
+      "Bash(rtk wc *)",
+      "Bash(rtk find *)",
+      "Bash(rtk read *)",
+      "Bash(rtk diff *)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(./target/release/batty src/main.rs)",
+      "Bash(./target/release/batty --plain src/main.rs)",
+      "Bash(./target/release/batty --line-range 1:10 src/main.rs)",
+      "Bash(./target/release/batty --list-languages)",
+      "Bash(./target/release/batty --list-themes)",
+      "Bash(./target/release/batty --language rust)",
+      "Bash(./target/release/batty --color=always src/main.rs)",
+      "Bash(./target/release/batty --color=never --plain -l rust)",
+      "Bash(./target/release/batty --line-range 0:5 src/main.rs)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(./target/release/batty /nonexistent/file)",
+      "Bash(./target/release/batty --decorations=never --color=never src/main.rs)",
+      "Bash(./target/release/batty --diff-context=10 --plain --color=never src/main.rs)",
+      "Bash(./target/release/batty --wrap=character --plain --color=never src/main.rs)",
+      "Bash(./target/release/batty --decorations=always --color=never --plain src/main.rs)",
+      "Bash(./target/release/batty --decorations=never src/main.rs)",
+      "Bash(rtk proxy *)",
+      "Bash(awk '{print $5, $NF}')"
+    ]
+  }
+}
