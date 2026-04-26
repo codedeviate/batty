@@ -32,6 +32,11 @@ pub struct Cli {
     #[arg(short = 'f', long, overrides_with = "no_follow")]
     pub follow: bool,
 
+    /// Show the left-side gutter (line numbers, diff markers, grid bar).
+    /// Cancels `--no-gutter` from config; otherwise inert (defers to --style).
+    #[arg(long, overrides_with = "no_gutter")]
+    pub gutter: bool,
+
     /// Highlight specific line(s)
     #[arg(short = 'H', long)]
     pub highlight_line: Vec<usize>,
@@ -74,6 +79,12 @@ pub struct Cli {
     /// Disable follow mode. Overrides `follow = true` in the config.
     #[arg(long, overrides_with = "follow")]
     pub no_follow: bool,
+
+    /// Hide the gutter (line numbers, diff markers, grid bar) regardless of
+    /// --style. Header / rule / snip stay on. A "cleaner reading" preset
+    /// that's less aggressive than --plain.
+    #[arg(long, overrides_with = "gutter")]
+    pub no_gutter: bool,
 
     /// Disable interactive mode. Overrides `interactive = true` in the config file.
     #[arg(long, overrides_with = "interactive")]

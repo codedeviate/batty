@@ -103,7 +103,16 @@ fn run() -> Result<()> {
     // --decorations=never collapses to plain output (overrides --style)
     let force_plain = args.plain
         || matches!(args.decorations, cli::DecorationsWhen::Never);
-    let style = StyleFlags::parse(&args.style, force_plain, args.number, args.diff);
+    let mut style = StyleFlags::parse(&args.style, force_plain, args.number, args.diff);
+    // --no-gutter strips the left side (numbers + changes + grid) without
+    // going all the way to --plain (header / rule / snip stay on).
+    if args.no_gutter {
+        style.numbers = false;
+        style.changes = false;
+        style.grid = false;
+    }
+    // args.gutter is purely the anti-no-gutter flag (mutual overrides_with);
+    // alone it's a no-op since defaults already include the gutter.
     let theme = resolve_theme(&theme_set, args.theme.as_deref());
     let line_range = match &args.line_range {
         Some(s) => Some(LineRange::parse(s)?),
@@ -190,6 +199,7 @@ fn run_interactive(
         args.top_pad,
         initial_markdown,
         can_toggle,
+        !args.no_gutter,
     )
 }
 

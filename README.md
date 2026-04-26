@@ -64,6 +64,7 @@ batty --list-themes                  # show all bundled themes
 | `--diff-context <N>` | Lines of context for diff display. *Default: 2.* (Parsed but currently doesn't filter to changed regions; see [Limitations](#limitations).) |
 | `-A, --show-all` | Show non-printable characters: `→` for tab, `·` for space, `•` for control chars. |
 | `--style <SPEC>` | Comma-separated style components: `full`, `plain`, `numbers`, `grid`, `header`, `rule`, `changes`, `snip`. *Default: `full`.* |
+| `--gutter` / `--no-gutter` | Force the left-side gutter (line numbers + diff markers + grid bar) on or off, regardless of `--style`. `--no-gutter` is a "cleaner reading" preset that's less aggressive than `--plain` (header / rule / snip stay on). `--gutter` cancels `no-gutter = true` from config. |
 | `--line-range <RANGE>` | Show only the given range, e.g. `10:20`, `:15`, `30:`, `42`. Rejects `0` and inverted ranges. |
 | `-H, --highlight-line <N>` | Highlight specific line(s) with inverse video. Repeatable. The first one acts as the **cursor reference** for relative numbering. |
 | `--tabs <N>` | Tab expansion width. *Default: 4.* |
@@ -145,6 +146,7 @@ line-numbers   = "relative"
 interactive    = true
 markdown       = false       # true → render every file as markdown
 markdown-on-extension = true # true → render only .md / .markdown files
+no-gutter      = false       # true → hide line numbers / changes / grid by default
 follow         = false       # set true to default to tail mode
 tail-lines     = 10
 highlight-line = [10, 20]
@@ -193,7 +195,8 @@ Enters raw mode in the alternate screen. A `▶` glyph in the gutter marks the c
 | `Ctrl-u` | Half-page up |
 | `PageDown` | Full page down |
 | `PageUp` | Full page up |
-| `m` | Toggle rendered Markdown view ↔ raw source. Active when the file has a `.md` / `.markdown` / `.mdown` / `.mkd` extension, or when `--markdown` was passed on launch. Status bar shows `[md]` while in rendered mode. |
+| `m` | Toggle rendered Markdown view ↔ raw source. Active when the file has a `.md` / `.markdown` / `.mdown` / `.mkd` extension, or when `--markdown` was passed on launch. Status bar shows `[md]` while in rendered mode. The toggle preserves your scroll position: pressing `m` from raw view lands you on the corresponding block in the rendered output, and pressing `m` again returns to the source line of the block you were viewing. The status bar in rendered mode shows `rendered N/M ↔ src K`. |
+| `n` | Toggle the gutter (line numbers + cursor glyph) on/off. Initial state follows `--gutter` / `--no-gutter`. Status bar shows `no-gutter` when off. |
 | `+` / `=` | Increase `--top-pad` by 1 row (live). Status bar shows `pad=N` when nonzero. |
 | `-` | Decrease `--top-pad` by 1 row (saturates at 0). |
 | `q` / `Esc` / `Ctrl-c` | Quit |

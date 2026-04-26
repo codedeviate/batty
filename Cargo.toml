@@ -1,6 +1,6 @@
 [package]
 name = "batty"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 description = "A cat clone with syntax highlighting, git integration, and Rhai support"
 license = "MIT"
@@ -19,6 +19,7 @@ crossterm = "0.28"
 toml = { version = "0.8", default-features = false, features = ["parse"] }
 termimad = "0.34"
 unicode-width = "0.1"
+pulldown-cmark = { version = "0.13", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

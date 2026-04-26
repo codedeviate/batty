@@ -68,6 +68,7 @@ pub fn run<'a>(
     top_pad: u16,
     initial_markdown: bool,
     can_toggle_markdown: bool,
+    initial_gutter_visible: bool,
 ) -> Result<()> {
     let total_lines = contents.lines().count().max(1);
     let mut cursor: usize = 1;
@@ -81,6 +82,15 @@ pub fn run<'a>(
     // overlay UI on the alt-screen's top rows, and the right padding can vary
     // tab-to-tab and after pane resizes — so let users tune it without exiting.
     let mut top_pad: u16 = top_pad;
+    // Runtime gutter visibility. Initial value comes from --gutter / --no-gutter
+    // (or the resolved config value); `n` flips it live.
+    let mut gutter_visible: bool = initial_gutter_visible;
+    // Cache of (rendered_row, source_line) tuples for the current markdown
+    // render. Built when entering markdown view so m-toggles can preserve
+    // scroll position between raw and rendered views. Cleared on resize so
+    // we re-render at the new width.
+    let mut markdown_map: Option<Vec<(usize, usize)>> = None;
+    let mut last_term_w: usize = 0;
 
     let _guard = TerminalGuard::enter()?;
 
@@ -88,6 +98,12 @@ pub fn run<'a>(
         let (term_w, term_h) = size().unwrap_or((80, 24));
         let term_w = term_w as usize;
         let term_h = term_h as usize;
+        // If the terminal width changed, invalidate the cached markdown map
+        // so it re-builds at the new width on next entry / use.
+        if term_w != last_term_w {
+            markdown_map = None;
+            last_term_w = term_w;
+        }
         // Reserve last row for the status bar, and `top_pad` rows at the top
         // (e.g., for Warp's overlay).
         let body_rows = term_h
@@ -114,6 +130,8 @@ pub fn run<'a>(
             top_pad,
             markdown_view,
             &mut markdown_scroll,
+            gutter_visible,
+            &mut markdown_map,
         )?;
 
         match event::read()? {
@@ -186,13 +204,42 @@ pub fn run<'a>(
                         // OR we're already in markdown view (so the user can flip
                         // back even if they forced --markdown on a non-md file).
                         if can_toggle_markdown || markdown_view {
-                            markdown_view = !markdown_view;
                             if markdown_view {
-                                // Reset scroll when entering rendered view so the
-                                // user always lands at the top of the document.
-                                markdown_scroll = 0;
+                                // Going markdown → raw: pull the source line from
+                                // the current rendered scroll position.
+                                if let Some(map) = markdown_map.as_ref() {
+                                    let src = crate::markdown::source_line_for_rendered(
+                                        map,
+                                        markdown_scroll,
+                                    );
+                                    cursor = src.clamp(1, total_lines);
+                                }
+                                markdown_view = false;
+                            } else {
+                                // Going raw → markdown: build (or reuse) the map,
+                                // scroll to the rendered row of the block at the
+                                // current source-line cursor.
+                                if markdown_map.is_none() {
+                                    let r = crate::markdown::render_with_map(
+                                        contents,
+                                        last_term_w.max(20),
+                                    );
+                                    markdown_map = Some(r.map);
+                                }
+                                if let Some(map) = markdown_map.as_ref() {
+                                    markdown_scroll = crate::markdown::rendered_row_for_source(
+                                        map, cursor,
+                                    );
+                                } else {
+                                    markdown_scroll = 0;
+                                }
+                                markdown_view = true;
                             }
                         }
+                    }
+                    KeyCode::Char('n') => {
+                        // Toggle the gutter (line numbers + cursor glyph) live.
+                        gutter_visible = !gutter_visible;
                     }
                     // Live top-pad adjustment for terminals that overlay UI on
                     // the alt-screen's top rows (e.g. Warp). `+` / `=` grow
@@ -235,22 +282,26 @@ fn render_frame(
     top_pad: u16,
     markdown_view: bool,
     markdown_scroll: &mut usize,
+    gutter_visible: bool,
+    markdown_map: &mut Option<Vec<(usize, usize)>>,
 ) -> Result<()> {
     let body_rows = term_h
         .saturating_sub(1 + top_pad as usize)
         .max(1);
 
     // Build the body buffer + position label.
-    // - Markdown view renders the whole document via termimad, then slices a
-    //   visible window of *rendered rows* using markdown_scroll.
+    // - Markdown view renders the whole document via termimad (with source-line
+    //   map), then slices a visible window of *rendered rows* using
+    //   markdown_scroll.
     // - Raw view goes through the standard printer with line_range applied.
     let (body_bytes, position_label): (Vec<u8>, String) = if markdown_view {
-        let full = crate::markdown::render_to_string(contents, term_w);
+        let rendered = crate::markdown::render_with_map(contents, term_w);
+        // Cache the map for m-toggle scroll preservation.
+        *markdown_map = Some(rendered.map.clone());
         // Termimad emits rows separated by '\n'; each row is self-contained
         // (its own escape opens/closes), so slicing on '\n' is safe.
-        let rows: Vec<&str> = full.split('\n').collect();
+        let rows: Vec<&str> = rendered.text.split('\n').collect();
         let total = rows.len().max(1);
-        // Clamp the caller's scroll into a valid window.
         let max_scroll = total.saturating_sub(body_rows);
         if *markdown_scroll > max_scroll {
             *markdown_scroll = max_scroll;
@@ -258,7 +309,13 @@ fn render_frame(
         let end = (*markdown_scroll + body_rows).min(total);
         let visible = &rows[*markdown_scroll..end];
         let body = visible.join("\n");
-        let label = format!("rendered {}/{}", *markdown_scroll + 1, total);
+        let src_line = crate::markdown::source_line_for_rendered(&rendered.map, *markdown_scroll);
+        let label = format!(
+            "rendered {}/{} ↔ src {}",
+            *markdown_scroll + 1,
+            total,
+            src_line
+        );
         (body.into_bytes(), label)
     } else {
         let mut highlighter = Highlighter::new(syntax, theme, syntax_set);
@@ -267,7 +324,10 @@ fn render_frame(
         let style = StyleFlags {
             header: false,
             grid: false,
-            numbers: true,
+            // Gutter visibility: numbers shown only when the user wants the
+            // gutter (the `n` key flips this live). Markdown is handled
+            // via the early branch above.
+            numbers: gutter_visible,
             rule: false,
             changes: false,
             snip: false,
@@ -289,7 +349,9 @@ fn render_frame(
             use_color: true,
             width: term_w,
             language_name: &syntax.name,
-            cursor: Some(cursor),
+            // Cursor glyph (▶) lives in the gutter — hide it alongside line
+            // numbers when the gutter is toggled off.
+            cursor: if gutter_visible { Some(cursor) } else { None },
             line_numbers,
             markdown: false,
         };
@@ -302,13 +364,14 @@ fn render_frame(
     // Status bar — shows position, mode tag, current top-pad (when nonzero),
     // and key hints.
     let mode_tag = if markdown_view { "  [md]" } else { "" };
+    let gutter_tag = if !gutter_visible { "  no-gutter" } else { "" };
     let pad_tag = if top_pad > 0 {
         format!("  pad={}", top_pad)
     } else {
         String::new()
     };
     let status_label = format!(
-        "  {}  {}  ({}){}{}  j/k g/G ^d/^u m +/- q",
+        "  {}  {}  ({}){}{}{}  j/k g/G ^d/^u m n +/- q",
         file_label,
         position_label,
         match line_numbers {
@@ -316,6 +379,7 @@ fn render_frame(
             LineNumberStyle::Relative => "rel",
         },
         mode_tag,
+        gutter_tag,
         pad_tag,
     );
     let status_truncated: String = status_label.chars().take(term_w).collect();

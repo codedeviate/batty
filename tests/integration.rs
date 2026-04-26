@@ -363,6 +363,53 @@ fn follow_and_interactive_are_mutually_exclusive() {
 }
 
 #[test]
+fn no_gutter_strips_numbers_and_grid_keeps_header() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("a.txt");
+    std::fs::write(&f, "alpha\nbeta\n").unwrap();
+    let out = batty()
+        .args(["--style=full", "--no-gutter", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    // Header still present.
+    assert!(s.contains("File:"), "expected File: header in: {:?}", s);
+    // Body lines are bare — no `│` grid bar, no leading line-number column.
+    assert!(s.contains("alpha\n"));
+    assert!(s.contains("beta\n"));
+    assert!(!s.contains("│"), "no grid bar expected: {}", s);
+    // No leading line-number digits before "alpha" / "beta" (they appear
+    // as the first non-decoration line content).
+    let lines: Vec<&str> = s.lines().collect();
+    assert!(
+        lines.iter().any(|l| l.trim_start() == "alpha"),
+        "expected bare 'alpha' line in: {:?}",
+        lines
+    );
+}
+
+#[test]
+fn gutter_cancels_no_gutter_from_config() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = dir.path().join("config.toml");
+    std::fs::write(&cfg, "no-gutter = true\n").unwrap();
+    let f = dir.path().join("a.txt");
+    std::fs::write(&f, "alpha\n").unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_batty"))
+        .env("BATTY_CONFIG_PATH", &cfg)
+        .args(["--gutter", "--style=full", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    // --gutter cancelled the config's no-gutter; the grid bar reappears.
+    assert!(s.contains("│"), "expected grid bar back: {}", s);
+}
+
+#[test]
 fn wrap_character_breaks_long_lines() {
     // batty doesn't get a real terminal width during tests; --color=never
     // and the default fallback width (80) make this deterministic. We
