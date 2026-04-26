@@ -77,6 +77,10 @@ pub fn run<'a>(
     // *rendered* rows, not source lines, since termimad transforms structure.
     // Clamped to a valid range inside render_frame each frame.
     let mut markdown_scroll: usize = 0;
+    // top_pad is live-adjustable via `+` / `-`. Some terminals (notably Warp)
+    // overlay UI on the alt-screen's top rows, and the right padding can vary
+    // tab-to-tab and after pane resizes — so let users tune it without exiting.
+    let mut top_pad: u16 = top_pad;
 
     let _guard = TerminalGuard::enter()?;
 
@@ -190,6 +194,15 @@ pub fn run<'a>(
                             }
                         }
                     }
+                    // Live top-pad adjustment for terminals that overlay UI on
+                    // the alt-screen's top rows (e.g. Warp). `+` / `=` grow
+                    // the pad by 1 row; `-` shrinks (saturating at 0).
+                    KeyCode::Char('+') | KeyCode::Char('=') => {
+                        top_pad = top_pad.saturating_add(1);
+                    }
+                    KeyCode::Char('-') => {
+                        top_pad = top_pad.saturating_sub(1);
+                    }
                     _ => {}
                 }
             }
@@ -286,10 +299,16 @@ fn render_frame(
         (buf, format!("line {}/{}", cursor, total_lines))
     };
 
-    // Status bar — always shows mode tag and key hints; position depends on view.
+    // Status bar — shows position, mode tag, current top-pad (when nonzero),
+    // and key hints.
     let mode_tag = if markdown_view { "  [md]" } else { "" };
+    let pad_tag = if top_pad > 0 {
+        format!("  pad={}", top_pad)
+    } else {
+        String::new()
+    };
     let status_label = format!(
-        "  {}  {}  ({}){}  vim-keys: j/k g/G ^d/^u m q",
+        "  {}  {}  ({}){}{}  j/k g/G ^d/^u m +/- q",
         file_label,
         position_label,
         match line_numbers {
@@ -297,6 +316,7 @@ fn render_frame(
             LineNumberStyle::Relative => "rel",
         },
         mode_tag,
+        pad_tag,
     );
     let status_truncated: String = status_label.chars().take(term_w).collect();
     let pad = term_w.saturating_sub(status_truncated.chars().count());

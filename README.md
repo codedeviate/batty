@@ -192,7 +192,11 @@ Enters raw mode in the alternate screen. A `▶` glyph in the gutter marks the c
 | `PageDown` | Full page down |
 | `PageUp` | Full page up |
 | `m` | Toggle rendered Markdown view ↔ raw source. Active when the file has a `.md` / `.markdown` / `.mdown` / `.mkd` extension, or when `--markdown` was passed on launch. Status bar shows `[md]` while in rendered mode. |
+| `+` / `=` | Increase `--top-pad` by 1 row (live). Status bar shows `pad=N` when nonzero. |
+| `-` | Decrease `--top-pad` by 1 row (saturates at 0). |
 | `q` / `Esc` / `Ctrl-c` | Quit |
+
+If your terminal hides the top of the alt-screen behind its own UI (Warp does this in some panes / after resizing), the live `+` / `-` bindings let you tune `top-pad` until content is visible — no need to exit, edit config, and retry. The value resets to whatever `--top-pad` (or `top-pad` in config) said next time you launch.
 
 Restrictions:
 
