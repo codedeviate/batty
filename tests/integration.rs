@@ -152,6 +152,97 @@ fn markdown_flag_renders_md() {
 }
 
 #[test]
+fn markdown_on_extension_renders_md_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("doc.md");
+    std::fs::write(&f, "# Title\n\n**bold** text\n").unwrap();
+    let out = batty()
+        .args(["--markdown-on-extension", "--style=plain", "--color=always"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    // Rendered markdown: heading text survives, ANSI styling present, raw `# `
+    // prefix is gone.
+    assert!(s.contains("Title"), "output: {:?}", s);
+    assert!(s.contains("\x1b["), "expected ANSI escapes in: {:?}", s);
+    assert!(!s.contains("# Title"), "raw heading should be gone: {:?}", s);
+}
+
+#[test]
+fn markdown_on_extension_leaves_non_md_file_raw() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("foo.rs");
+    std::fs::write(&f, "// # Heading-like comment\nfn main() {}\n").unwrap();
+    let out = batty()
+        .args(["--markdown-on-extension", "--plain", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    // The literal source survives unchanged when extension doesn't match.
+    assert_eq!(s, "// # Heading-like comment\nfn main() {}\n");
+}
+
+#[test]
+fn markdown_force_overrides_markdown_on_extension() {
+    // --markdown beats extension check: a .rs file still renders as markdown.
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("foo.rs");
+    std::fs::write(&f, "# Heading\n\nfn main() {}\n").unwrap();
+    let out = batty()
+        .args([
+            "--markdown",
+            "--markdown-on-extension",
+            "--style=plain",
+            "--color=always",
+        ])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    // --markdown wins → file rendered as markdown despite .rs extension.
+    assert!(s.contains("Heading"));
+    assert!(s.contains("\x1b["));
+    assert!(!s.contains("# Heading"));
+}
+
+#[test]
+fn markdown_on_extension_via_config() {
+    // Config-only path: markdown-on-extension = true in the TOML, .md file
+    // on CLI → renders. Same config + .rs file → raw.
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = dir.path().join("config.toml");
+    std::fs::write(&cfg, "markdown-on-extension = true\n").unwrap();
+
+    let md = dir.path().join("doc.md");
+    std::fs::write(&md, "# Title\n").unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_batty"))
+        .env("BATTY_CONFIG_PATH", &cfg)
+        .args(["--style=plain", "--color=always"])
+        .arg(&md)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8(out.stdout).unwrap();
+    assert!(!s.contains("# Title"), "md should render: {:?}", s);
+
+    let rs = dir.path().join("foo.rs");
+    std::fs::write(&rs, "fn main() {}\n").unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_batty"))
+        .env("BATTY_CONFIG_PATH", &cfg)
+        .args(["--plain", "--color=never"])
+        .arg(&rs)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert_eq!(String::from_utf8(out.stdout).unwrap(), "fn main() {}\n");
+}
+
+#[test]
 fn no_markdown_overrides_config() {
     let dir = tempfile::tempdir().unwrap();
     let cfg = dir.path().join("config.toml");

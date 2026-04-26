@@ -83,7 +83,8 @@ batty --list-themes                  # show all bundled themes
 | Flag | Description |
 |---|---|
 | `-m, --markdown` | Render Markdown to terminal escapes instead of showing the raw source. Uses `termimad` under the hood. Works on any file, not just `.md`. |
-| `--no-markdown` | Disable Markdown rendering. Overrides `markdown = true` in the config. |
+| `--markdown-on-extension` | Render as Markdown only when the file extension is `.md` / `.markdown` / `.mdown` / `.mkd`. Lower priority than `--markdown` (which forces on for any file) and `--no-markdown` (which disables). Useful as a config default — set `markdown-on-extension = true` and `.md` files auto-render while source files stay raw. |
+| `--no-markdown` | Disable Markdown rendering. Overrides `markdown = true` and `markdown-on-extension = true` in the config. |
 
 When `--markdown` is on, per-line decorations (line numbers, diff markers, cursor indicator, line range filtering) are skipped — Markdown rendering produces its own block structure where they don't apply. The header still prints with the language label `Markdown (rendered)`.
 
@@ -142,7 +143,8 @@ tabs           = 2
 top-pad        = 2
 line-numbers   = "relative"
 interactive    = true
-markdown       = false       # set true to default-render markdown
+markdown       = false       # true → render every file as markdown
+markdown-on-extension = true # true → render only .md / .markdown files
 follow         = false       # set true to default to tail mode
 tail-lines     = 10
 highlight-line = [10, 20]

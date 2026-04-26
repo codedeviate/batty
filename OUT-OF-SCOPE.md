@@ -40,7 +40,8 @@ Things that have been considered, intentionally not implemented, and may stay th
 ## Markdown rendering
 
 - **Inline syntax highlighting of fenced code blocks.** termimad's support is limited; we don't pre-process fences with syntect first. Code blocks render with termimad's default code styling.
-- **Auto-enable markdown for `.md` extensions.** Currently opt-in only via `--markdown` / `-m` or `markdown = true` in config.
+- **Configurable markdown extension list.** `is_markdown_path()` matches `.md` / `.markdown` / `.mdown` / `.mkd` literally. If you want `.rmd` or `.txt` to auto-render, pass `--markdown` explicitly.
+- **Content-based markdown detection.** No first-line sniffing for markdown-y patterns. Extension-based is the user's mental model; sniffing would mis-fire on plaintext with `# headers`.
 - **Configurable markdown skin.** termimad's `MadSkin::default()` is used; no `--markdown-skin` flag.
 
 ## Rhai grammar gaps

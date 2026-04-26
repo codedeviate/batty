@@ -146,7 +146,7 @@ fn run() -> Result<()> {
             language_name: &syntax.name,
             cursor,
             line_numbers: args.line_numbers,
-            markdown: args.markdown,
+            markdown: resolve_markdown(&args, path),
         };
         print(&mut stdout, input, &contents, &mut hl, &cfg)?;
         stdout.flush()?;
@@ -175,7 +175,8 @@ fn run_interactive(
     // The `m` toggle is enabled when the file looks like markdown by extension,
     // OR the user explicitly forced --markdown (so they can flip back to raw).
     let is_md = markdown::is_markdown_path(&path);
-    let can_toggle = is_md || args.markdown;
+    let initial_markdown = resolve_markdown(args, Some(&path));
+    let can_toggle = is_md || initial_markdown;
 
     interactive::run(
         &input.display_name(),
@@ -187,9 +188,27 @@ fn run_interactive(
         args.tabs,
         args.show_all,
         args.top_pad,
-        args.markdown,
+        initial_markdown,
         can_toggle,
     )
+}
+
+/// Resolve whether to render the input as Markdown given the precedence:
+///   1. `--no-markdown` → never
+///   2. `--markdown` (or `markdown = true`) → always
+///   3. `--markdown-on-extension` AND path matches `is_markdown_path` → yes
+///   4. otherwise → no
+fn resolve_markdown(args: &Cli, path: Option<&std::path::Path>) -> bool {
+    if args.no_markdown {
+        return false;
+    }
+    if args.markdown {
+        return true;
+    }
+    if args.markdown_on_extension {
+        return path.map(markdown::is_markdown_path).unwrap_or(false);
+    }
+    false
 }
 
 pub fn term_width() -> usize {

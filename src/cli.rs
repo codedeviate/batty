@@ -65,6 +65,12 @@ pub struct Cli {
     #[arg(short = 'm', long, overrides_with = "no_markdown")]
     pub markdown: bool,
 
+    /// Render markdown files (.md / .markdown / .mdown / .mkd) automatically,
+    /// but leave other files as raw highlighted source. Lower priority than
+    /// --markdown (force on for any file) and --no-markdown (force off).
+    #[arg(long, overrides_with = "markdown_on_extension")]
+    pub markdown_on_extension: bool,
+
     /// Disable follow mode. Overrides `follow = true` in the config.
     #[arg(long, overrides_with = "follow")]
     pub no_follow: bool,
