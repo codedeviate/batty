@@ -29,32 +29,36 @@ pub fn render_with_map(source: &str, width: usize) -> RenderedMarkdown {
     let skin = termimad::MadSkin::default();
     let render_width = width.max(20);
 
-    // Collect top-level block byte ranges. Track depth: Start increments,
-    // End decrements. A "top-level block" is anything whose Start happens
-    // at depth 0; it ends when we return to depth 0 via End.
+    // Collect top-level block byte ranges by walking pulldown_cmark events.
+    // We must increment depth on EVERY Start (block-level *and* inline) and
+    // decrement on EVERY End — otherwise inline tags like Strong / Emph
+    // inside a paragraph would unbalance the counter and prematurely close
+    // the outer block. We only record `current_start` when the Start is a
+    // top-level block tag at depth 0.
+    fn is_top_level_block(tag: &Tag) -> bool {
+        matches!(
+            tag,
+            Tag::Paragraph
+                | Tag::Heading { .. }
+                | Tag::BlockQuote(_)
+                | Tag::CodeBlock(_)
+                | Tag::List(_)
+                | Tag::HtmlBlock
+                | Tag::Table(_)
+                | Tag::FootnoteDefinition(_)
+                | Tag::DefinitionList
+                | Tag::MetadataBlock(_)
+        )
+    }
+
     let mut blocks: Vec<std::ops::Range<usize>> = Vec::new();
     let mut depth: i32 = 0;
     let mut current_start: Option<usize> = None;
 
     for (event, range) in Parser::new(source).into_offset_iter() {
         match event {
-            Event::Start(Tag::Paragraph)
-            | Event::Start(Tag::Heading { .. })
-            | Event::Start(Tag::BlockQuote(_))
-            | Event::Start(Tag::CodeBlock(_))
-            | Event::Start(Tag::List(_))
-            | Event::Start(Tag::Item)
-            | Event::Start(Tag::HtmlBlock)
-            | Event::Start(Tag::Table(_))
-            | Event::Start(Tag::TableHead)
-            | Event::Start(Tag::TableRow)
-            | Event::Start(Tag::TableCell)
-            | Event::Start(Tag::FootnoteDefinition(_))
-            | Event::Start(Tag::DefinitionList)
-            | Event::Start(Tag::DefinitionListTitle)
-            | Event::Start(Tag::DefinitionListDefinition)
-            | Event::Start(Tag::MetadataBlock(_)) => {
-                if depth == 0 {
+            Event::Start(tag) => {
+                if depth == 0 && is_top_level_block(&tag) {
                     current_start = Some(range.start);
                 }
                 depth += 1;
@@ -67,9 +71,7 @@ pub fn render_with_map(source: &str, width: usize) -> RenderedMarkdown {
                     }
                 }
             }
-            // Standalone block-level events (no matching End): rules and
-            // bare html sit at depth 0 by themselves.
-            Event::Rule | Event::Html(_) if depth == 0 => {
+            Event::Rule if depth == 0 => {
                 blocks.push(range);
             }
             _ => {}
@@ -180,6 +182,29 @@ mod tests {
     fn render_handles_empty_input() {
         let out = render_to_string("", 80);
         let _ = out;
+    }
+
+    #[test]
+    fn render_with_map_handles_inline_tags_in_blocks() {
+        // Regression: a paragraph with **bold** / *emph* / `code` should be
+        // ONE block. Earlier impl decremented depth on inline End events
+        // without incrementing on inline Starts, prematurely closing the
+        // outer block.
+        let src = "First **bold** paragraph.\n\n\
+                   Second *emph* paragraph with `code`.\n\n\
+                   Third paragraph plain.\n";
+        let r = render_with_map(src, 80);
+        // Three paragraphs → exactly three blocks in the map.
+        assert_eq!(
+            r.map.len(),
+            3,
+            "expected 3 paragraph blocks, got map: {:?}",
+            r.map
+        );
+        // All three paragraph texts must survive in the rendered output.
+        assert!(r.text.contains("First"), "missing first: {:?}", r.text);
+        assert!(r.text.contains("Second"), "missing second: {:?}", r.text);
+        assert!(r.text.contains("Third"), "missing third: {:?}", r.text);
     }
 
     #[test]
