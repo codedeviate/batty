@@ -753,3 +753,72 @@ fn diff_markers_appear_in_gutter() {
     assert!(s.contains('~'), "expected ~ marker for modified line; got: {}", s);
     assert!(s.contains('+'), "expected + marker for added line; got: {}", s);
 }
+
+#[test]
+fn auto_encoding_handles_iso_8859_1_file() {
+    // "café åäö\n" encoded as ISO-8859-1 (not valid UTF-8).
+    let bytes = b"caf\xe9 \xe5\xe4\xf6\n";
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("latin1.txt");
+    std::fs::write(&f, bytes).unwrap();
+
+    let out = batty()
+        .args(["--plain", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(s, "café åäö\n");
+}
+
+#[test]
+fn explicit_iso_8859_1_encoding_decodes_latin1() {
+    let bytes = b"Espa\xf1ol\n";
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("latin1.txt");
+    std::fs::write(&f, bytes).unwrap();
+
+    let out = batty()
+        .args(["--plain", "--color=never", "--encoding=iso-8859-1"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(s, "Español\n");
+}
+
+#[test]
+fn strict_utf8_encoding_errors_on_latin1_input() {
+    let bytes = b"caf\xe9\n";
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("latin1.txt");
+    std::fs::write(&f, bytes).unwrap();
+
+    let out = batty()
+        .args(["--plain", "--color=never", "--encoding=utf-8"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(!out.status.success(), "expected failure; stdout: {}", String::from_utf8_lossy(&out.stdout));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("UTF-8") || stderr.contains("decode"),
+        "expected decode error in stderr; got: {}", stderr);
+}
+
+#[test]
+fn auto_encoding_passes_utf8_through_unchanged() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("utf8.txt");
+    std::fs::write(&f, "café 日本語\n").unwrap();
+
+    let out = batty()
+        .args(["--plain", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(s, "café 日本語\n");
+}

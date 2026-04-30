@@ -53,6 +53,7 @@ batty --list-themes                  # show all bundled themes
 |---|---|
 | `<FILES>...` | One or more files. Use `-` for stdin (default when no files given). |
 | `-l, --language <NAME>` | Override syntax detection. Use any name shown by `--list-languages`. |
+| `--encoding <ENC>` | Input file encoding: `auto` (default), `utf-8`, `iso-8859-1` (alias `latin1`). `auto` decodes as UTF-8 when valid and silently falls back to ISO-8859-1 otherwise; `utf-8` is strict and errors on invalid byte sequences; `iso-8859-1` always decodes byte-for-byte (each byte 0x00–0xFF → U+0000–U+00FF). Applies to file reads and stdin. |
 
 ### Display
 
@@ -150,6 +151,7 @@ no-gutter      = false       # true → hide line numbers / changes / grid by de
 follow         = false       # set true to default to tail mode
 tail-lines     = 10
 highlight-line = [10, 20]
+encoding       = "auto"      # "utf-8" | "iso-8859-1" | "auto" (default)
 ```
 
 ### Mapping rules

@@ -1,3 +1,4 @@
+use crate::cli::Encoding;
 use anyhow::{Context, Result};
 use std::fs;
 use std::io::{self, Read};
@@ -18,16 +19,20 @@ impl InputKind {
         }
     }
 
-    pub fn read(&self) -> Result<String> {
-        match self {
-            InputKind::File(p) => fs::read_to_string(p)
-                .with_context(|| format!("failed to read {}", p.display())),
+    pub fn read(&self, encoding: Encoding) -> Result<String> {
+        let bytes = match self {
+            InputKind::File(p) => fs::read(p)
+                .with_context(|| format!("failed to read {}", p.display()))?,
             InputKind::Stdin => {
-                let mut s = String::new();
-                io::stdin().read_to_string(&mut s).context("failed to read stdin")?;
-                Ok(s)
+                let mut buf = Vec::new();
+                io::stdin().read_to_end(&mut buf).context("failed to read stdin")?;
+                buf
             }
-        }
+        };
+        decode(&bytes, encoding).with_context(|| match self {
+            InputKind::File(p) => format!("failed to decode {}", p.display()),
+            InputKind::Stdin => "failed to decode stdin".to_string(),
+        })
     }
 
     pub fn display_name(&self) -> String {
@@ -36,6 +41,32 @@ impl InputKind {
             InputKind::Stdin => "STDIN".to_string(),
         }
     }
+}
+
+/// Decode raw bytes per the chosen encoding.
+///
+/// `Auto` returns the UTF-8 string when valid, otherwise re-decodes as
+/// ISO-8859-1 (which is infallible: every byte maps to U+0000..=U+00FF).
+/// `Utf8` is strict — invalid sequences error. `Latin1` always succeeds.
+pub fn decode(bytes: &[u8], encoding: Encoding) -> Result<String> {
+    match encoding {
+        Encoding::Utf8 => std::str::from_utf8(bytes)
+            .map(|s| s.to_string())
+            .context("invalid UTF-8 (try --encoding=auto or --encoding=iso-8859-1)"),
+        Encoding::Latin1 => Ok(decode_latin1(bytes)),
+        Encoding::Auto => match std::str::from_utf8(bytes) {
+            Ok(s) => Ok(s.to_string()),
+            Err(_) => Ok(decode_latin1(bytes)),
+        },
+    }
+}
+
+fn decode_latin1(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len());
+    for &b in bytes {
+        s.push(b as char);
+    }
+    s
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -132,5 +163,49 @@ mod tests {
     fn open_open_matches_all() {
         let r = LineRange::parse(":").unwrap();
         assert_eq!((r.start, r.end), (1, usize::MAX));
+    }
+
+    #[test]
+    fn decode_utf8_strict_rejects_latin1() {
+        // 0xE5 is `å` in Latin-1, but a continuation byte in UTF-8.
+        let bytes = b"caf\xe9\n";
+        assert!(decode(bytes, Encoding::Utf8).is_err());
+    }
+
+    #[test]
+    fn decode_latin1_always_succeeds() {
+        let bytes = b"caf\xe9 \xe5\xe4\xf6\n";
+        let s = decode(bytes, Encoding::Latin1).unwrap();
+        assert_eq!(s, "café åäö\n");
+    }
+
+    #[test]
+    fn decode_auto_prefers_utf8_when_valid() {
+        let bytes = "café".as_bytes();
+        assert_eq!(decode(bytes, Encoding::Auto).unwrap(), "café");
+    }
+
+    #[test]
+    fn decode_auto_falls_back_to_latin1() {
+        let bytes = b"caf\xe9";
+        assert_eq!(decode(bytes, Encoding::Auto).unwrap(), "café");
+    }
+
+    #[test]
+    fn decode_latin1_covers_full_byte_range() {
+        let bytes: Vec<u8> = (0u8..=255).collect();
+        let s = decode(&bytes, Encoding::Latin1).unwrap();
+        let chars: Vec<char> = s.chars().collect();
+        assert_eq!(chars.len(), 256);
+        for (i, &c) in chars.iter().enumerate() {
+            assert_eq!(c as u32, i as u32);
+        }
+    }
+
+    #[test]
+    fn decode_empty_is_empty() {
+        assert_eq!(decode(b"", Encoding::Auto).unwrap(), "");
+        assert_eq!(decode(b"", Encoding::Utf8).unwrap(), "");
+        assert_eq!(decode(b"", Encoding::Latin1).unwrap(), "");
     }
 }

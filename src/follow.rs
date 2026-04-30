@@ -1,14 +1,19 @@
-use crate::cli::Cli;
+use crate::cli::{Cli, Encoding};
 use crate::highlight::{Highlighter, resolve_theme};
-use crate::input::{InputKind, LineRange};
+use crate::input::{InputKind, LineRange, decode};
 use crate::printer::{PrinterConfig, StyleFlags, print};
 use crate::syntax;
 use anyhow::Result;
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::Duration;
+
+fn read_decoded(path: &Path, encoding: Encoding) -> Result<String> {
+    let bytes = fs::read(path)?;
+    decode(&bytes, encoding)
+}
 
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 
@@ -54,7 +59,7 @@ pub fn run(
     let mut stdout = std::io::stdout().lock();
 
     // First render: header + last tail_lines lines.
-    let contents = fs::read_to_string(&path)?;
+    let contents = read_decoded(&path, args.encoding)?;
     let total = contents.lines().count();
     let first_line = contents.lines().next();
     let syntax = syntax::detect_syntax(syntax_set, Some(&path), args.language.as_deref(), first_line);
@@ -100,7 +105,7 @@ pub fn run(
             // Truncation / rotation: reset and re-render the last tail_lines.
             writeln!(stdout, "--- file truncated, restarting ---")?;
             stdout.flush()?;
-            let contents = fs::read_to_string(&path).unwrap_or_default();
+            let contents = read_decoded(&path, args.encoding).unwrap_or_default();
             let total = contents.lines().count();
             let start = total.saturating_sub(args.tail_lines).saturating_add(1).max(1);
             let mut hl = Highlighter::new(syntax, theme, syntax_set);
@@ -125,7 +130,7 @@ pub fn run(
             continue;
         }
         // size grew: render the new lines.
-        let contents = match fs::read_to_string(&path) {
+        let contents = match read_decoded(&path, args.encoding) {
             Ok(c) => c,
             Err(_) => continue,
         };

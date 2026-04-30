@@ -137,7 +137,7 @@ fn run() -> Result<()> {
         if idx > 0 && style.rule {
             writeln!(stdout, "{}", "─".repeat(width.saturating_sub(1)))?;
         }
-        let contents = input.read()?;
+        let contents = input.read(args.encoding)?;
         let path = match input { InputKind::File(p) => Some(p.as_path()), InputKind::Stdin => None };
         let first_line = contents.lines().next();
         let syntax = syntax::detect_syntax(&syntax_set, path, args.language.as_deref(), first_line);
@@ -176,7 +176,7 @@ fn run_interactive(
         _ => anyhow::bail!("interactive mode requires a file path"),
     };
     let input = InputKind::from_path(&path);
-    let contents = input.read()?;
+    let contents = input.read(args.encoding)?;
     let first_line = contents.lines().next();
     let syntax = syntax::detect_syntax(syntax_set, Some(&path), args.language.as_deref(), first_line);
     let theme = resolve_theme(theme_set, args.theme.as_deref());

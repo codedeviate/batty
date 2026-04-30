@@ -27,6 +27,11 @@ pub struct Cli {
     #[arg(long, default_value_t = 2)]
     pub diff_context: usize,
 
+    /// Input file encoding. `auto` tries UTF-8 and falls back to ISO-8859-1
+    /// if UTF-8 decoding fails.
+    #[arg(long, value_enum, default_value_t = Encoding::Auto)]
+    pub encoding: Encoding,
+
     /// Tail mode: show the last lines of the file and keep watching for new
     /// content (like `tail -f`). Single file only; no stdin.
     #[arg(short = 'f', long, overrides_with = "no_follow")]
@@ -151,3 +156,15 @@ pub enum DecorationsWhen { Always, Auto, Never }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum LineNumberStyle { Absolute, Relative }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Encoding {
+    /// Try UTF-8 first; fall back to ISO-8859-1 on decode failure.
+    Auto,
+    /// Strict UTF-8. Errors out on invalid byte sequences.
+    #[value(name = "utf-8", alias = "utf8")]
+    Utf8,
+    /// ISO-8859-1 (Latin-1). Each byte maps to its matching Unicode code point.
+    #[value(name = "iso-8859-1", alias = "latin1", alias = "latin-1")]
+    Latin1,
+}

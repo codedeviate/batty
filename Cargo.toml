@@ -1,6 +1,6 @@
 [package]
 name = "batty"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 description = "A cat clone with syntax highlighting, git integration, and Rhai support"
 license = "MIT"
