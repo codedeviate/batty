@@ -16,13 +16,26 @@ Targets macOS and Linux.
 
 ## Installation
 
+### Homebrew (macOS / Linux)
+
 ```bash
-git clone <repo> batty && cd batty
+brew tap codedeviate/tap
+brew install batty
+```
+
+The formula builds from source via `cargo`, so a Rust toolchain is pulled in as a build-time dependency and removed afterwards.
+
+### Build from source
+
+```bash
+git clone https://github.com/codedeviate/batty.git && cd batty
 cargo build --release
 # Binary lands at target/release/batty
 ```
 
 Move it onto your `$PATH` however you like (e.g. `cp target/release/batty ~/.local/bin/`).
+
+Requires Rust **1.86** or newer.
 
 ---
 
