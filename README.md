@@ -19,7 +19,7 @@ Targets macOS and Linux.
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew tap codedeviate/tap
+brew tap codedeviate/cli
 brew install batty
 ```
 
