@@ -25,6 +25,14 @@ brew install batty
 
 The formula builds from source via `cargo`, so a Rust toolchain is pulled in as a build-time dependency and removed afterwards.
 
+### Cargo (crates.io)
+
+```bash
+cargo install batty-cat
+```
+
+The crate is published as `batty-cat` on crates.io because the `batty` and `batty-cli` names were already taken — the installed binary is still `batty`.
+
 ### Build from source
 
 ```bash
