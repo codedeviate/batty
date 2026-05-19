@@ -1,7 +1,7 @@
 # batty
 
 [![GitHub](https://img.shields.io/badge/github-codedeviate%2Fbatty-181717?logo=github)](https://github.com/codedeviate/batty)
-[![Latest release](https://img.shields.io/badge/release-v0.9.1-blue)](https://github.com/codedeviate/batty/releases)
+[![Latest release](https://img.shields.io/badge/release-v0.10.0-blue)](https://github.com/codedeviate/batty/releases)
 [![crates.io](https://img.shields.io/badge/crates.io-batty--cat-fc8d62?logo=rust)](https://crates.io/crates/batty-cat)
 [![Homebrew](https://img.shields.io/badge/homebrew-codedeviate%2Fcli%2Fbatty-fbb040?logo=homebrew)](https://github.com/codedeviate/homebrew-cli)
 [![Rust edition 2021](https://img.shields.io/badge/rust-2021_edition_(MSRV_1.86)-dea584?logo=rust)](https://www.rust-lang.org)
@@ -14,6 +14,8 @@ A from-scratch Rust clone of [`bat`](https://github.com/sharkdp/bat) — `cat` w
 - **Vim-style relative line numbers** — center distances on a cursor.
 - **Markdown rendering** (`-m`) — render Markdown like `glow`, with a `m` toggle in interactive mode.
 - **Tail / follow mode** (`-f`) — `tail -f` semantics with syntax highlighting.
+- **Colorized `--examples`** — curated, copy-pasteable scenarios for every common flag.
+- **Man page** — install `man/batty.1` to your `MANPATH` for `man batty`.
 - **TOML config** — `~/.config/batty/config.toml`.
 - **Small release binary** — ~2.8 MB with full grammar/theme bundles.
 
@@ -49,6 +51,19 @@ cargo build --release
 ```
 
 Move it onto your `$PATH` however you like (e.g. `cp target/release/batty ~/.local/bin/`).
+
+A `man` page lives at `man/batty.1` in the repo. To install it locally:
+
+```bash
+# macOS (Homebrew default MANPATH)
+cp man/batty.1 /usr/local/share/man/man1/
+
+# Linux (typical)
+sudo cp man/batty.1 /usr/local/share/man/man1/
+sudo mandb            # rebuild index if your distro caches
+```
+
+Then `man batty` works. You can also preview without installing: `man ./man/batty.1`.
 
 Requires Rust **1.86** or newer.
 
@@ -148,6 +163,7 @@ Truncation / rotation: when the file shrinks (e.g. `> error.log` or logrotate), 
 |---|---|
 | `-L, --list-languages` | Print every supported language (one per line) and exit. |
 | `--list-themes` | Print every bundled theme and exit. |
+| `--examples` | Print colorized, copy-pasteable usage examples for every common flag and exit. Complements `--help` (terse) with curated scenarios. |
 | `-h, --help` | Short help. |
 | `--help` | Long help with full descriptions. |
 | `-V, --version` | Print version. |
@@ -311,6 +327,13 @@ The full list lives in [`OUT-OF-SCOPE.md`](OUT-OF-SCOPE.md). Highlights:
 - Interactive mode is keyboard-only: no search, no mouse, no persistent cursor across runs.
 - Follow mode polls every 200 ms; a real `inotify`/`kqueue` watcher would be lower-latency but adds platform code.
 - Follow mode rebuilds the syntax highlighter on every poll, so multi-line constructs (block comments, multi-line strings) that span a poll boundary may briefly miscolor.
+
+---
+
+## Changelog
+
+Release history lives in [`CHANGELOG.md`](CHANGELOG.md), formatted per
+[Keep a Changelog](https://keepachangelog.com/).
 
 ---
 

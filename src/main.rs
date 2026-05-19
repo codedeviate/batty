@@ -1,5 +1,6 @@
 mod cli;
 mod config;
+mod examples;
 mod follow;
 mod git;
 mod highlight;
@@ -44,6 +45,13 @@ fn run() -> Result<()> {
     all.extend(config::load_args().into_iter().map(Into::into));
     all.extend(std::env::args_os().skip(1));
     let args = Cli::parse_from(all);
+
+    // --examples short-circuits before everything else (no file required,
+    // no syntax/theme load, no pager). Mirrors --help / --list-* behavior.
+    if args.examples {
+        examples::print();
+        return Ok(());
+    }
 
     let syntax_set = syntax::build_syntax_set()?;
     let theme_set = theme_set();

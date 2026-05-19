@@ -1,0 +1,320 @@
+.\" Manpage for batty.
+.\" Keep in sync with src/cli.rs, README.md, and CLAUDE.md (see "Keep the
+.\" man page in sync" convention).
+.TH BATTY 1 "2026-05-19" "batty 0.10.0" "User Commands"
+.SH NAME
+batty \- a cat clone with syntax highlighting, git diff markers, and a TUI
+.SH SYNOPSIS
+.B batty
+[\fIOPTIONS\fR] [\fIFILE\fR...]
+.SH DESCRIPTION
+.B batty
+is a from-scratch Rust reimplementation of
+.BR bat (1)
+\(em
+.BR cat (1)
+with syntax highlighting, git diff markers in the gutter, pager integration,
+relative line numbers, Markdown rendering, tail/follow mode, and an interactive
+TUI. Targets macOS and Linux.
+.PP
+When no
+.I FILE
+is given,
+.B batty
+reads from standard input. Pass
+.B \-
+explicitly to mix stdin into a multi-file invocation.
+.SH OPTIONS
+Flags are listed alphabetically by long name. Short forms ride along.
+.TP
+.BR \-\-color =\fIWHEN\fR
+When to use colors:
+.BR always ,
+.BR auto " (default),"
+.BR never .
+.TP
+.BR \-\-decorations =\fIWHEN\fR
+Decoration mode override:
+.BR always ,
+.BR auto " (default),"
+.BR never .
+.B never
+collapses to plain output like
+.BR \-\-plain .
+.TP
+.BR \-d ", " \-\-diff
+Show git diff markers vs
+.B HEAD
+in the gutter.
+.TP
+.BR \-\-diff-context =\fIN\fR
+Lines of context for diff (default 2). Currently parsed but not yet used to
+filter output.
+.TP
+.BR \-\-encoding =\fIENC\fR
+Input file encoding:
+.BR auto " (default; UTF-8 with ISO-8859-1 fallback),"
+.BR utf-8 ", "
+.BR iso-8859-1 " / " latin1 .
+.TP
+.B \-\-examples
+Print colorized, copy-pasteable usage examples and exit. Complements
+.BR \-\-help .
+.TP
+.BR \-f ", " \-\-follow
+Tail mode:
+.BR tail (1)-style
+follow with syntax highlighting. Single file only; no stdin.
+.TP
+.B \-\-gutter
+Show the left-side gutter (line numbers, diff markers, grid bar). Cancels
+.B \-\-no-gutter
+from config.
+.TP
+.BR \-H ", " \-\-highlight-line " " \fIN\fR
+Highlight line
+.IR N .
+Repeatable. The first occurrence acts as the cursor reference for relative line
+numbering in static mode.
+.TP
+.BR \-i ", " \-\-interactive
+Enter the interactive TUI. See
+.B INTERACTIVE MODE
+below.
+.TP
+.BR \-l ", " \-\-language " " \fILANG\fR
+Set the language for syntax highlighting (overrides extension detection).
+.TP
+.BR \-\-line-numbers =\fISTYLE\fR
+Line numbering style:
+.BR absolute " (default), "
+.BR relative
+(vim-style, centered on the cursor).
+.TP
+.BR \-\-line-range =\fIRANGE\fR
+Display only the specified range. Forms:
+.IR A : B ,
+.IR : B
+(head),
+.IR A :
+(tail-to-end),
+.IR N
+(single line).
+.TP
+.BR \-L ", " \-\-list-languages
+List supported languages and exit.
+.TP
+.B \-\-list-themes
+List supported themes and exit.
+.TP
+.BR \-m ", " \-\-markdown
+Render Markdown files instead of showing the raw source. Works for any file.
+.TP
+.B \-\-markdown-on-extension
+Auto-render
+.BR .md " / " .markdown " / " .mdown " / " .mkd
+files as Markdown; leave other files raw. Lower priority than
+.B \-\-markdown
+and
+.BR \-\-no-markdown .
+.TP
+.B \-\-no-follow
+Disable follow mode. Overrides
+.B follow = true
+in the config.
+.TP
+.B \-\-no-gutter
+Hide the gutter regardless of
+.BR \-\-style .
+Header / rule / snip stay on \(em a cleaner-reading preset less aggressive
+than
+.BR \-\-plain .
+.TP
+.B \-\-no-interactive
+Disable interactive mode. Overrides
+.B interactive = true
+in the config.
+.TP
+.B \-\-no-markdown
+Disable Markdown rendering. Overrides
+.B markdown = true
+in the config.
+.TP
+.BR \-n ", " \-\-number
+Show line numbers (equivalent to
+.BR \-\-style=numbers ).
+.TP
+.BR \-\-paging =\fIWHEN\fR
+When to use the pager:
+.BR always ,
+.BR auto " (default),"
+.BR never .
+.B never
+also disables interactive mode.
+.TP
+.BR \-p ", " \-\-plain
+Plain output (no decorations, equivalent to
+.BR \-\-style=plain ).
+.TP
+.BR \-A ", " \-\-show-all
+Show non-printable characters.
+.TP
+.BR \-\-style =\fICOMPONENTS\fR
+Comma-separated style components:
+.BR full ", "
+.BR plain ", "
+.BR numbers ", "
+.BR grid ", "
+.BR header ", "
+.BR rule ", "
+.BR changes ", "
+.BR snip .
+Default
+.BR full .
+.TP
+.BR \-\-tabs =\fIN\fR
+Tab width (default 4).
+.TP
+.BR \-\-tail-lines =\fIN\fR
+Number of trailing lines to show in follow mode (default 10).
+.TP
+.BR \-\-theme =\fINAME\fR
+Set the color theme. Use
+.B \-\-list-themes
+to see available names.
+.TP
+.BR \-\-top-pad =\fIN\fR
+Reserve
+.I N
+rows at the top of the screen in interactive mode. Useful for terminals
+(e.g.\& Warp) that overlay UI on the alternate screen's top rows.
+.TP
+.BR \-\-wrap =\fIMODE\fR
+Wrap mode:
+.BR never ", "
+.BR character ", "
+.BR auto " (default)."
+Forced to
+.B never
+in interactive mode.
+.TP
+.BR \-h ", " \-\-help
+Print short help.
+.TP
+.BR \-V ", " \-\-version
+Print version and exit.
+.SH INTERACTIVE MODE
+Launched with
+.BR \-i / \-\-interactive .
+Single file only.
+.PP
+Keybindings:
+.RS 4
+.TP 14
+.B j / k
+Scroll one line down / up.
+.TP
+.B g / G
+Jump to top / bottom.
+.TP
+.B Ctrl-d / u
+Half-page down / up.
+.TP
+.B PgDn / PgUp
+Full page.
+.TP
+.B m
+Toggle Markdown rendering (raw \(<-> rendered). Available when the file is
+Markdown by extension or
+.B \-\-markdown
+is set.
+.TP
+.B n
+Toggle the gutter.
+.TP
+.B + / \-
+Adjust
+.B \-\-top-pad
+live (useful for terminals with shifting top overlays).
+.TP
+.B q
+Quit.
+.RE
+.SH CONFIG
+.B batty
+reads a TOML config at
+.B ~/.config/batty/config.toml
+(XDG-style, even on macOS).
+Top-level keys map to CLI long-flag names with hyphens preserved.
+Example:
+.PP
+.RS 4
+.nf
+theme            = "Dracula"
+tabs             = 2
+top-pad          = 2
+line-numbers     = "relative"
+markdown-on-extension = true
+highlight-line   = [10, 20]
+.fi
+.RE
+.PP
+Boolean
+.B true
+maps to the flag being set; arrays expand to repeated
+.BI \-\- key = item
+flags; unknown keys are forwarded to clap, which rejects them with a clear
+error.
+.PP
+Override the config path with
+.B BATTY_CONFIG_PATH
+(set to
+.B /dev/null
+to opt out entirely).
+.SH ENVIRONMENT
+.TP
+.B BATTY_CONFIG_PATH
+Override the default config file path. Set to
+.B /dev/null
+for hermetic runs (used by the integration tests).
+.TP
+.BR PAGER ", " LESS
+Honored by the pager step. The default pager is
+.B less
+with
+.BR \-FRX .
+.TP
+.B NO_COLOR
+When set,
+.B batty
+disables colored output (same as
+.BR \-\-color=never ).
+.SH FILES
+.TP
+.B ~/.config/batty/config.toml
+Default config file.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Error (file not found, decode failure on
+.BR \-\-encoding=utf-8 ,
+invalid flag combination, etc.).
+.SH SEE ALSO
+.BR bat (1),
+.BR cat (1),
+.BR less (1),
+.BR tail (1).
+.SH AUTHORS
+Written by Thomas Bj\(:ork. See the
+.B AUTHORS
+section of the repository
+.UR https://github.com/codedeviate/batty
+.UE
+for the full contributor list.
+.SH LICENSE
+MIT. See the
+.B LICENSE
+file in the source distribution.

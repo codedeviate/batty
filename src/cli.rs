@@ -32,6 +32,12 @@ pub struct Cli {
     #[arg(long, value_enum, default_value_t = Encoding::Auto)]
     pub encoding: Encoding,
 
+    /// Print colorized usage examples for all common flags and exit.
+    /// Complements `--help`: `--help` enumerates every flag in clap's terse
+    /// format; `--examples` shows curated, copy-pasteable scenarios.
+    #[arg(long, overrides_with = "examples")]
+    pub examples: bool,
+
     /// Tail mode: show the last lines of the file and keep watching for new
     /// content (like `tail -f`). Single file only; no stdin.
     #[arg(short = 'f', long, overrides_with = "no_follow")]
