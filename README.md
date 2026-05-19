@@ -1,12 +1,12 @@
 # batty
 
 [![GitHub](https://img.shields.io/badge/github-codedeviate%2Fbatty-181717?logo=github)](https://github.com/codedeviate/batty)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Rust edition 2021](<https://img.shields.io/badge/rust-2021_edition_(MSRV_1.86)-dea584?logo=rust>)](https://www.rust-lang.org)
-
+<br/>
 [![Latest release](https://img.shields.io/badge/release-v0.10.0-blue)](https://github.com/codedeviate/batty/releases)
 [![crates.io](https://img.shields.io/badge/crates.io-batty--cat-fc8d62?logo=rust)](https://crates.io/crates/batty-cat)
-[![Homebrew](<https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/codedeviate/homebrew-cli/main/api/formula.json&query=$[?(@.name=='batty')].versions.stable&label=batty&logo=homebrew>)](https://github.com/codedeviate/homebrew-cli)
+[![Homebrew](https://img.shields.io/badge/homebrew-codedeviate%2Fcli%2Fbatty-fbb040?logo=homebrew)](https://github.com/codedeviate/homebrew-cli)
 
 A from-scratch Rust clone of [`bat`](https://github.com/sharkdp/bat) — `cat` with syntax highlighting, git diff markers, and a pager. Plus:
 
