@@ -98,7 +98,9 @@ cargo build --release       # size-optimized binary, ~2.6 MB on macOS arm64
 ./target/release/batty -i foo
 ```
 
-**After any code change, always run all three: `cargo test`, `cargo build`, and `cargo build --release`.** The release profile (LTO + `opt-level="z"` + `panic="abort"` + `codegen-units=1`) exercises code paths the debug build doesn't — type-level monomorphization differences, dead-code elimination, panic-strategy interactions — so it's not unusual for `cargo build` to succeed while `cargo build --release` fails (or vice versa). Don't declare a change "done" until all three pass.
+**After any code change, always run `cargo test` and `cargo build --release`.** The release profile (LTO + `opt-level="z"` + `panic="abort"` + `codegen-units=1`) exercises code paths the debug build doesn't — type-level monomorphization differences, dead-code elimination, panic-strategy interactions — so it's not unusual for `cargo build` to succeed while `cargo build --release` fails (or vice versa).
+
+**When building the release target, skip the debug target.** Don't run `cargo build` alongside `cargo build --release` as a matter of course — the release build is the one that ships and is the stricter check. The debug target is only built when explicitly requested or when it's needed for a specific reason (e.g., faster iteration on a non-shipping investigation); in that case build it separately.
 
 Release profile: `opt-level="z"`, `lto=true`, `codegen-units=1`, `strip=true`, `panic="abort"`. Don't relax these without good reason — they extract significant size from `syntect`/`git2`/`crossterm`.
 
