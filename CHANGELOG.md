@@ -10,6 +10,14 @@ While at `0.x`:
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-05-22
+
+### Added
+
+- Crate-root `#![doc = include_str!("../README.md")]` so [docs.rs](https://docs.rs/batty-cat)
+  renders the full README on the crate landing page instead of a bare module
+  list. No behavior change to the binary.
+
 ## [0.10.0] — 2026-05-19
 
 ### Added
@@ -241,7 +249,8 @@ While at `0.x`:
 - Initial release: full `bat`-parity (highlighting, git diff, pager,
   config, themes), bundled Rhai grammar, 36 tests, 2.5 MB binary.
 
-[Unreleased]: https://github.com/codedeviate/batty/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/codedeviate/batty/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/codedeviate/batty/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/codedeviate/batty/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/codedeviate/batty/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/codedeviate/batty/releases/tag/v0.9.0
