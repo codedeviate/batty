@@ -426,7 +426,8 @@ fn wrap_with_continuation(
                         out.push_str(&last_escape);
                     }
                     out.push_str(&tail);
-                    col = col.saturating_sub(break_col);
+                    debug_assert!(col >= break_col, "col={} break_col={}", col, break_col);
+                    col -= break_col;
                     last_break = None;
                     // Fall through to placing `ch` below.
                 } else {
@@ -687,7 +688,7 @@ mod tests {
         // the row, not the first.
         let out = wrap_with_continuation("foo    bar baz", 6, ">>", WrapMode::Word, "");
         let rows: Vec<&str> = out.split('\n').collect();
-        assert!(rows.len() >= 2, "expected at least 2 rows in {:?}", out);
+        assert_eq!(rows.len(), 3, "expected exactly 3 rows in {:?}", out);
         // First row's stripped content has visible width <= 6.
         let r0 = strip_ansi(rows[0]);
         assert!(r0.chars().count() <= 6, "row 0 too wide: {:?}", rows[0]);
@@ -695,6 +696,9 @@ mod tests {
         assert!(rows[1].starts_with(">>"), "row 1 missing prefix: {:?}", rows[1]);
         // First row ends with spaces (the break was at the last whitespace).
         assert!(r0.ends_with(' '), "row 0 should end with a space: {:?}", rows[0]);
+        // Row 2 should start with the prefix and contain "baz".
+        assert!(rows[2].starts_with(">>"), "row 2 missing prefix: {:?}", rows[2]);
+        assert!(rows[2].contains("baz"), "row 2 missing 'baz': {:?}", rows[2]);
     }
 
     #[test]
