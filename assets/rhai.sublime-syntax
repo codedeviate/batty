@@ -63,7 +63,7 @@ contexts:
       scope: punctuation.definition.string.end.rhai
       pop: true
   single_string:
-    - meta_scope: string.quoted.single.rhai
+    - meta_scope: string.quoted.single.char.rhai
     - match: "\\\\."
       scope: constant.character.escape.rhai
     - match: "'"

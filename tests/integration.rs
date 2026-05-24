@@ -573,6 +573,7 @@ fn rhai_grammar_full_coverage() {
          let q = math::sqrt(2.0);\n\
          let f = Fn(\"name\");\n\
          let n = parse_int(\"42\");\n\
+         let c = 'x';\n\
          fn double(x) { x * 2 }\n",
     )
     .unwrap();
@@ -613,6 +614,7 @@ fn rhai_grammar_full_coverage() {
     assert!(stripped.contains("Hello, ${"), "template string survived: {:?}", stripped);
     assert!(stripped.contains("#{ key: 1"), "map literal survived: {:?}", stripped);
     assert!(stripped.contains("obj?.field ?? default"), "?? / ?. ops: {:?}", stripped);
+    assert!(stripped.contains("let c = 'x'"), "char literal survived: {:?}", stripped);
     assert!(stripped.contains(".14159"), "leading-dot float: {:?}", stripped);
     assert!(stripped.contains("math::sqrt"), ":: accessor: {:?}", stripped);
     assert!(stripped.contains("Fn("), "Fn builtin: {:?}", stripped);
