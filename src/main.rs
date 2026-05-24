@@ -101,6 +101,17 @@ fn run() -> Result<()> {
         std::io::stdout().is_terminal()
     };
 
+    // Resolve --wrap=auto using the pre-pager TTY snapshot. Matches bat:
+    // `auto` wraps when stdout is a real terminal, otherwise behaves as
+    // `never` (so pipes / file redirection don't get continuation prefixes
+    // injected into them).
+    let resolved_wrap = match args.wrap {
+        cli::WrapMode::Auto => {
+            if stdout_was_tty { cli::WrapMode::Character } else { cli::WrapMode::Never }
+        }
+        other => other,
+    };
+
     pager::setup(args.paging);
 
     // Color decision (uses pre-pager TTY status)
@@ -158,7 +169,7 @@ fn run() -> Result<()> {
             line_range,
             highlight_lines: highlight_lines.clone(),
             tabs: args.tabs,
-            wrap: args.wrap,
+            wrap: resolved_wrap,
             show_all: args.show_all,
             use_color,
             width,
