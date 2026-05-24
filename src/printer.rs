@@ -568,6 +568,15 @@ mod tests {
     }
 
     #[test]
+    fn wrap_word_breaks_at_space() {
+        // body_width=9. Char-break would give "hello wor\n>>ld foo".
+        // Word-break must give "hello \n>>world foo" (trailing space on
+        // line 1 is invisible; "world" stays intact on line 2).
+        let out = wrap_with_continuation("hello world foo", 9, ">>", WrapMode::Word, "");
+        assert_eq!(out, "hello \n>>world foo");
+    }
+
+    #[test]
     fn build_first_gutter_includes_all_components() {
         let mut hl = std::collections::HashSet::new();
         hl.insert(1);

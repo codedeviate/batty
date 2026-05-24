@@ -155,7 +155,7 @@ pub enum ColorWhen { Always, Auto, Never }
 pub enum PagingWhen { Always, Auto, Never }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum WrapMode { Never, Character, Auto }
+pub enum WrapMode { Never, Character, Auto, Word }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum DecorationsWhen { Always, Auto, Never }
