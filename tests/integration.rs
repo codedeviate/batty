@@ -883,3 +883,62 @@ fn wrap_character_still_wraps_when_piped() {
         newline_count, s
     );
 }
+
+/// End-to-end verification: `batty --plain --color=never --wrap=word <file>`
+/// breaks at whitespace boundaries, not mid-word, for normal prose.
+#[test]
+fn wrap_word_breaks_at_space_in_real_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("prose.txt");
+    // ~200 chars of space-separated short words. With body_width=80
+    // (the non-TTY term_width fallback), this must wrap at least twice.
+    let words = "the quick brown fox jumps over the lazy dog ".repeat(5);
+    // Remove trailing space + add newline.
+    let content = format!("{}\n", words.trim_end());
+    std::fs::write(&f, &content).unwrap();
+    let out = batty()
+        .args(["--plain", "--color=never", "--wrap=word"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let s = String::from_utf8(out.stdout).unwrap();
+    // Must wrap at least once.
+    assert!(s.matches('\n').count() >= 2, "expected wrap, got {:?}", s);
+    // For every row except possibly the last (the source-line-final row),
+    // the row must end with whitespace OR be a complete short word — i.e.,
+    // no row should end in the middle of one of our 3–5 letter words.
+    // Strategy: the last visible char of each row except the final one must
+    // be a space (or, if the algorithm trims trailing space on the previous
+    // line during wrap, the next row's first char after the prefix must
+    // begin a complete word from the source).
+    //
+    // The simplest assertion: split on '\n', drop the trailing empty (from
+    // the source-line terminator), and for every line that isn't the last
+    // row, verify it doesn't END mid-word. A mid-word break would leave a
+    // fragment like "quic" or "fo" at the end.
+    let rows: Vec<&str> = s.split('\n').filter(|r| !r.is_empty()).collect();
+    let known_words = [
+        "the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog",
+    ];
+    for (i, row) in rows.iter().enumerate() {
+        if i == rows.len() - 1 {
+            // Last row may legitimately end mid-stream if the source line
+            // ran out; skip the mid-word check there.
+            continue;
+        }
+        let trimmed = row.trim_end();
+        // The trailing token of `trimmed` should be one of our known words
+        // (or empty if the wrap left only whitespace before \n).
+        let last_token = trimmed.split_whitespace().last().unwrap_or("");
+        assert!(
+            last_token.is_empty() || known_words.contains(&last_token),
+            "row {} ends mid-word with {:?} (full row: {:?})",
+            i, last_token, row
+        );
+    }
+}
