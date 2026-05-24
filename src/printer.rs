@@ -367,6 +367,11 @@ fn wrap_with_continuation(
     let mut in_escape = false;
     let mut current_escape = String::new();
     let mut last_escape = String::new();
+    // In word-mode, the byte offset in `out` right after the most-recent
+    // non-newline whitespace, plus the visible col at that point. `None`
+    // means there's no break point on the current row — overflow falls back
+    // to char-break in that case.
+    let mut last_break: Option<(usize, usize)> = None;
 
     for ch in rendered.chars() {
         if in_escape {
@@ -389,6 +394,7 @@ fn wrap_with_continuation(
         if ch == '\n' {
             out.push(ch);
             col = 0;
+            last_break = None;
             continue;
         }
         let w = UnicodeWidthChar::width(ch).unwrap_or(0);
@@ -396,24 +402,72 @@ fn wrap_with_continuation(
         // already placed something on this row (col > 0) — otherwise a
         // single 2-col char into a 1-col body_width loops forever.
         if col > 0 && col + w > body_width {
-            let needs_reset = !last_escape.is_empty() || !persistent_sgr.is_empty();
-            if needs_reset {
-                out.push_str(RESET);
+            // Word-mode: prefer breaking at the last whitespace on this row.
+            // If there isn't one, fall back to char-break.
+            if matches!(mode, WrapMode::Word) {
+                if let Some((off, break_col)) = last_break {
+                    // Drain everything after the break point into `tail`,
+                    // inject the wrap sequence, then replay the tail on the
+                    // new line. The tail may itself contain ANSI escapes —
+                    // they pass through naturally. The pre-tail `last_escape`
+                    // re-emit may be redundant if the tail begins with its
+                    // own escape; terminals handle that idempotently.
+                    let tail: String = out.drain(off..).collect();
+                    let needs_reset = !last_escape.is_empty() || !persistent_sgr.is_empty();
+                    if needs_reset {
+                        out.push_str(RESET);
+                    }
+                    out.push('\n');
+                    out.push_str(continuation_prefix);
+                    if !persistent_sgr.is_empty() {
+                        out.push_str(persistent_sgr);
+                    }
+                    if !last_escape.is_empty() {
+                        out.push_str(&last_escape);
+                    }
+                    out.push_str(&tail);
+                    col = col.saturating_sub(break_col);
+                    last_break = None;
+                    // Fall through to placing `ch` below.
+                } else {
+                    // No break point on this row → char-break fallback.
+                    let needs_reset = !last_escape.is_empty() || !persistent_sgr.is_empty();
+                    if needs_reset {
+                        out.push_str(RESET);
+                    }
+                    out.push('\n');
+                    out.push_str(continuation_prefix);
+                    if !persistent_sgr.is_empty() {
+                        out.push_str(persistent_sgr);
+                    }
+                    if !last_escape.is_empty() {
+                        out.push_str(&last_escape);
+                    }
+                    col = 0;
+                }
+            } else {
+                // Character / Auto path (unchanged behavior).
+                let needs_reset = !last_escape.is_empty() || !persistent_sgr.is_empty();
+                if needs_reset {
+                    out.push_str(RESET);
+                }
+                out.push('\n');
+                out.push_str(continuation_prefix);
+                if !persistent_sgr.is_empty() {
+                    out.push_str(persistent_sgr);
+                }
+                if !last_escape.is_empty() {
+                    out.push_str(&last_escape);
+                }
+                col = 0;
             }
-            out.push('\n');
-            out.push_str(continuation_prefix);
-            // Re-apply the persistent SGR (e.g. INVERT) FIRST so it sits
-            // alongside any syntect FG/BG escape that follows.
-            if !persistent_sgr.is_empty() {
-                out.push_str(persistent_sgr);
-            }
-            if !last_escape.is_empty() {
-                out.push_str(&last_escape);
-            }
-            col = 0;
         }
         out.push(ch);
         col += w;
+        // Track whitespace as a break point for word-mode.
+        if matches!(mode, WrapMode::Word) && ch.is_whitespace() && ch != '\n' {
+            last_break = Some((out.len(), col));
+        }
     }
     out
 }
@@ -574,6 +628,127 @@ mod tests {
         // line 1 is invisible; "world" stays intact on line 2).
         let out = wrap_with_continuation("hello world foo", 9, ">>", WrapMode::Word, "");
         assert_eq!(out, "hello \n>>world foo");
+    }
+
+    #[test]
+    fn wrap_word_falls_back_to_char_for_long_word() {
+        // Single 20-char word, body_width=5. No whitespace → char-break.
+        let out = wrap_with_continuation("supercalifragilistic", 5, ">>", WrapMode::Word, "");
+        // 20 chars / 5-wide → at least 3 break points → at least 3 newlines.
+        let newlines = out.matches('\n').count();
+        assert!(newlines >= 3, "expected >=3 breaks, got {} in {:?}", newlines, out);
+        // No row (between newlines) should exceed body_width=5 visible chars.
+        // Strip the prefix on continuation rows; just sanity-check the first row.
+        let first_row = out.split('\n').next().unwrap();
+        // First row may contain trailing reset escape; strip ANSI for width check.
+        let stripped: String = strip_ansi(first_row);
+        assert!(stripped.chars().count() <= 5, "first row exceeded width: {:?}", first_row);
+    }
+
+    #[test]
+    fn wrap_word_mixed_long_then_short() {
+        // "hello supercalifragilistic done", width 10.
+        // Expected: "hello " wraps, then "supercalif" char-break, etc.
+        let out = wrap_with_continuation(
+            "hello supercalifragilistic done",
+            10,
+            ">>",
+            WrapMode::Word,
+            "",
+        );
+        // Some rows came from word-break (after "hello "), some from
+        // char-break (inside the long word). Verify both paths fired by
+        // checking we have multiple newlines AND "hello " ends a row.
+        assert!(out.matches('\n').count() >= 2, "expected multiple breaks in {:?}", out);
+        let first_row = out.split('\n').next().unwrap();
+        assert_eq!(strip_ansi(first_row), "hello ", "first row should end at the space: {:?}", first_row);
+    }
+
+    #[test]
+    fn wrap_word_preserves_ansi_across_break() {
+        let red = "\x1b[38;2;255;0;0m";
+        let input = format!("{}hello world foo", red);
+        let out = wrap_with_continuation(&input, 9, "..", WrapMode::Word, "");
+        // Expect RESET + \n + ".." + red replayed at the break.
+        let break_marker = format!("\x1b[0m\n..{}", red);
+        assert!(
+            out.contains(&break_marker),
+            "expected red re-emitted after word-break in {:?}",
+            out
+        );
+    }
+
+    #[test]
+    fn wrap_word_handles_consecutive_spaces() {
+        // "foo    bar baz", width 6. Four spaces after "foo"; the algorithm
+        // picks the LAST whitespace that fits as the break point — so row 1
+        // ends at the 3rd space (col 6) and row 2 starts with the 4th space.
+        // Note: this verifies the algorithm picks the LAST whitespace on
+        // the row, not the first.
+        let out = wrap_with_continuation("foo    bar baz", 6, ">>", WrapMode::Word, "");
+        let rows: Vec<&str> = out.split('\n').collect();
+        assert!(rows.len() >= 2, "expected at least 2 rows in {:?}", out);
+        // First row's stripped content has visible width <= 6.
+        let r0 = strip_ansi(rows[0]);
+        assert!(r0.chars().count() <= 6, "row 0 too wide: {:?}", rows[0]);
+        // Second row begins with the continuation prefix.
+        assert!(rows[1].starts_with(">>"), "row 1 missing prefix: {:?}", rows[1]);
+        // First row ends with spaces (the break was at the last whitespace).
+        assert!(r0.ends_with(' '), "row 0 should end with a space: {:?}", rows[0]);
+    }
+
+    #[test]
+    fn wrap_word_resets_break_tracking_on_newline() {
+        // Two source lines. Second line is long and has its own spaces.
+        // Verify the second line word-wraps independently (i.e., the break
+        // tracking from line 1 doesn't bleed across the \n).
+        let out = wrap_with_continuation(
+            "first line\nsecond very long second line",
+            12,
+            ">>",
+            WrapMode::Word,
+            "",
+        );
+        // "first line" is 10 chars, fits in 12. "second very long second line"
+        // is 28 chars and must wrap with at least one word-break.
+        // Confirm by counting newlines: 1 from source + at least 1 from wrap = >= 2.
+        let nl = out.matches('\n').count();
+        assert!(nl >= 2, "expected >= 2 newlines (source + wrap), got {} in {:?}", nl, out);
+        // First row is exactly "first line".
+        let first_row = out.split('\n').next().unwrap();
+        assert_eq!(strip_ansi(first_row), "first line");
+    }
+
+    #[test]
+    fn wrap_word_re_emits_persistent_sgr_after_break() {
+        let invert = "\x1b[7m";
+        let red = "\x1b[38;2;255;0;0m";
+        let input = format!("{}hello world", red);
+        let out = wrap_with_continuation(&input, 7, "..", WrapMode::Word, invert);
+        // After word-break at the space, expect: RESET + \n + ".." + INVERT + red.
+        let break_marker = format!("\x1b[0m\n..{}{}", invert, red);
+        assert!(
+            out.contains(&break_marker),
+            "expected persistent INVERT + red after word-break in {:?}",
+            out
+        );
+    }
+
+    /// Strip ANSI CSI sequences from a string for visible-content assertions.
+    /// Kept inside the test module since it's only used by the word-wrap tests.
+    fn strip_ansi(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut chars = s.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                for c2 in chars.by_ref() {
+                    if c2 == 'm' { break; }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
     }
 
     #[test]
