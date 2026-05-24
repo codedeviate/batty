@@ -835,7 +835,7 @@ fn wrap_auto_is_never_when_stdout_not_tty() {
     let content = "a".repeat(200) + "\n";
     std::fs::write(&f, &content).unwrap();
     let out = batty()
-        .args(["--plain", "--color=never"])
+        .args(["--plain", "--color=never", "--wrap=auto"])
         .arg(&f)
         .output()
         .unwrap();
