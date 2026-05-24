@@ -22,10 +22,6 @@ entry rather than leaving a crossed-out line here.
 
 ## Waiting
 
-### Rendering
-
-- **Word-boundary wrapping.** `--wrap=character` and `--wrap=auto` currently break at column boundaries (mid-word if necessary). Real word-boundary wrap (break at spaces, hyphenate gracefully) is a different algorithm — fine for prose, arguably wrong for source code anyway, so deferred unless asked.
-
 ### Theming
 
 - **Custom theme loading from disk.** Themes come exclusively from `two-face::theme::extra()`. A real `--theme-file path/to/theme.tmTheme` flag is not wired.

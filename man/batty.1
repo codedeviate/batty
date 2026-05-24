@@ -1,7 +1,7 @@
 .\" Manpage for batty.
 .\" Keep in sync with src/cli.rs, README.md, and CLAUDE.md (see "Keep the
 .\" man page in sync" convention).
-.TH BATTY 1 "2026-05-24" "batty 0.11.0" "User Commands"
+.TH BATTY 1 "2026-05-24" "batty 0.12.0" "User Commands"
 .SH NAME
 batty \- a cat clone with syntax highlighting, git diff markers, and a TUI
 .SH SYNOPSIS
@@ -193,6 +193,7 @@ rows at the top of the screen in interactive mode. Useful for terminals
 Wrap mode:
 .BR never ", "
 .BR character ", "
+.BR word ", "
 .BR auto " (default)."
 .B auto
 wraps when stdout is a terminal and behaves as
@@ -200,6 +201,10 @@ wraps when stdout is a terminal and behaves as
 otherwise, so piped output keeps its original line structure.
 .B character
 always wraps at the terminal-width boundary.
+.B word
+breaks at whitespace boundaries instead, best for prose; words longer than the wrap width fall back to
+.B character
+-style breaks so output never overflows.
 Forced to
 .B never
 in interactive mode.

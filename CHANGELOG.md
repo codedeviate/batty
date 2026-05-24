@@ -10,6 +10,20 @@ While at `0.x`:
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-05-24
+
+### Added
+
+- `--wrap=word` (and `wrap = "word"` in config): new wrap mode that
+  breaks at whitespace boundaries (`char::is_whitespace`) instead of
+  column boundaries. Words longer than the wrap width fall back to
+  character-break automatically, so the output never overflows the
+  terminal. ANSI color escapes and persistent SGR attributes (e.g. the
+  INVERT used for highlighted lines) are preserved across word breaks
+  exactly as in `--wrap=character`. `--wrap=auto` is unchanged — still
+  resolves to `character` on a TTY and `never` off — so users opt into
+  word-wrap explicitly.
+
 ## [0.11.0] — 2026-05-24
 
 ### Changed
@@ -266,7 +280,8 @@ While at `0.x`:
 - Initial release: full `bat`-parity (highlighting, git diff, pager,
   config, themes), bundled Rhai grammar, 36 tests, 2.5 MB binary.
 
-[Unreleased]: https://github.com/codedeviate/batty/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/codedeviate/batty/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/codedeviate/batty/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/codedeviate/batty/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/codedeviate/batty/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/codedeviate/batty/compare/v0.9.1...v0.10.0

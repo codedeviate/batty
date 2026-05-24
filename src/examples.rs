@@ -132,8 +132,10 @@ fn render<W: Write>(w: &mut W, c: bool) -> io::Result<()> {
     note(w, c, "Default `auto` tries UTF-8, falls back to ISO-8859-1 on decode failure.")?;
     example(w, c, "Force wrap mode", &[
         "batty --wrap=character long-lines.txt",
-        "batty --wrap=never  long-lines.txt",
+        "batty --wrap=word      long-paragraph.md",
+        "batty --wrap=never     long-lines.txt",
     ])?;
+    note(w, c, "`word` breaks at whitespace; words longer than the wrap width fall back to character-break.")?;
 
     section(w, c, "PAGER / OUTPUT")?;
 
