@@ -76,6 +76,12 @@ pub struct Cli {
     #[arg(long, overrides_with = "list_themes")]
     pub list_themes: bool,
 
+    /// Live mode: alt-screen TUI that re-renders the file on any content
+    /// change. Same keybindings as --interactive. Single file only; no
+    /// stdin. Mutually exclusive with --interactive and --follow.
+    #[arg(long, overrides_with = "no_live")]
+    pub live: bool,
+
     /// Render Markdown files instead of showing the raw source. Works for any
     /// file but most useful for .md / .markdown.
     #[arg(short = 'm', long, overrides_with = "no_markdown")]
@@ -100,6 +106,10 @@ pub struct Cli {
     /// Disable interactive mode. Overrides `interactive = true` in the config file.
     #[arg(long, overrides_with = "interactive")]
     pub no_interactive: bool,
+
+    /// Disable live mode. Overrides `live = true` in the config.
+    #[arg(long, overrides_with = "live")]
+    pub no_live: bool,
 
     /// Disable Markdown rendering. Overrides `markdown = true` in the config.
     #[arg(long, overrides_with = "markdown")]
