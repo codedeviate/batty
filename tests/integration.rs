@@ -822,3 +822,62 @@ fn auto_encoding_passes_utf8_through_unchanged() {
     let s = String::from_utf8(out.stdout).unwrap();
     assert_eq!(s, "café 日本語\n");
 }
+
+/// `--wrap=auto` should treat non-TTY stdout as `never` (matches bat).
+/// Under captured stdout, `term_width()` falls back to 80, so a 200-char
+/// line is longer than the printable width. With the resolution in place,
+/// the long line emits unbroken — no continuation prefix, no extra `\n`.
+#[test]
+fn wrap_auto_is_never_when_stdout_not_tty() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("long.txt");
+    // 200 'a's — comfortably > 80 cols (the non-TTY term_width fallback).
+    let content = "a".repeat(200) + "\n";
+    std::fs::write(&f, &content).unwrap();
+    let out = batty()
+        .args(["--plain", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let s = String::from_utf8(out.stdout).unwrap();
+    // With wrap=auto resolved to never, the 200-char line stays on one
+    // output line: exactly one '\n' (the source-line terminator).
+    let newline_count = s.matches('\n').count();
+    assert_eq!(
+        newline_count, 1,
+        "expected single newline (no wrap) under piped stdout, got {} in {:?}",
+        newline_count, s
+    );
+}
+
+/// `--wrap=character` must still wrap even when stdout is not a TTY.
+/// Explicit user intent overrides the auto resolution.
+#[test]
+fn wrap_character_still_wraps_when_piped() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("long.txt");
+    let content = "a".repeat(200) + "\n";
+    std::fs::write(&f, &content).unwrap();
+    let out = batty()
+        .args(["--plain", "--color=never", "--wrap=character"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let s = String::from_utf8(out.stdout).unwrap();
+    let newline_count = s.matches('\n').count();
+    assert!(
+        newline_count > 1,
+        "expected multiple newlines (wrap=character still wraps), got {} in {:?}",
+        newline_count, s
+    );
+}
