@@ -48,6 +48,20 @@ pub fn run(
         }
     };
 
+    // Match main.rs: --wrap=auto on non-TTY stdout becomes never. Follow
+    // mode bypasses the pager so this stdout check is the right signal.
+    let resolved_wrap = match args.wrap {
+        crate::cli::WrapMode::Auto => {
+            use std::io::IsTerminal;
+            if std::io::stdout().is_terminal() {
+                crate::cli::WrapMode::Character
+            } else {
+                crate::cli::WrapMode::Never
+            }
+        }
+        other => other,
+    };
+
     // Resolve --style and --decorations exactly like the static path does.
     let force_plain = args.plain
         || matches!(args.decorations, crate::cli::DecorationsWhen::Never);
@@ -74,7 +88,7 @@ pub fn run(
             line_range: Some(initial_range),
             highlight_lines: highlight_lines.clone(),
             tabs: args.tabs,
-            wrap: args.wrap,
+            wrap: resolved_wrap,
             show_all: args.show_all,
             use_color,
             width,
@@ -114,7 +128,7 @@ pub fn run(
                 line_range: Some(LineRange { start, end: usize::MAX }),
                 highlight_lines: highlight_lines.clone(),
                 tabs: args.tabs,
-                wrap: args.wrap,
+                wrap: resolved_wrap,
                 show_all: args.show_all,
                 use_color,
                 width,
@@ -142,7 +156,7 @@ pub fn run(
                 line_range: Some(LineRange { start: last_lineno + 1, end: usize::MAX }),
                 highlight_lines: highlight_lines.clone(),
                 tabs: args.tabs,
-                wrap: args.wrap,
+                wrap: resolved_wrap,
                 show_all: args.show_all,
                 use_color,
                 width,
