@@ -25,7 +25,6 @@ entry rather than leaving a crossed-out line here.
 ### Rendering
 
 - **Word-boundary wrapping.** `--wrap=character` and `--wrap=auto` currently break at column boundaries (mid-word if necessary). Real word-boundary wrap (break at spaces, hyphenate gracefully) is a different algorithm — fine for prose, arguably wrong for source code anyway, so deferred unless asked.
-- **`--wrap=auto` adapting on stdout-not-a-tty.** Real bat treats `auto` as "wrap when stdout is a TTY, never otherwise." We currently treat `auto` and `character` identically. Could add the TTY-aware nuance if someone pipes batty to a tool that chokes on inserted line breaks.
 
 ### Theming
 
@@ -38,10 +37,6 @@ entry rather than leaving a crossed-out line here.
 ### Markdown rendering
 
 - **Configurable markdown skin.** termimad's `MadSkin::default()` is used; no `--markdown-skin` flag.
-
-### Rhai grammar gaps
-
-- **Char literal scope** — single-quoted `'a'` are technically char literals in Rhai, but we color them as `string.quoted.single` for theme compatibility. Could be revisited if a theme really needs different coloring.
 
 ---
 

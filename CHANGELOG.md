@@ -10,6 +10,23 @@ While at `0.x`:
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-05-24
+
+### Changed
+
+- `--wrap=auto` (the default) is now TTY-aware: when stdout is not a
+  terminal (piped to a file or another command), batty no longer inserts
+  line breaks or continuation prefixes. Matches
+  [`bat`](https://github.com/sharkdp/bat)'s long-standing behavior.
+  Explicit `--wrap=character` continues to wrap regardless of stdout
+  type; `--wrap=never` is unchanged.
+- Rhai single-quoted character literals now carry the more specific
+  TextMate scope `string.quoted.single.char.rhai` (was
+  `string.quoted.single.rhai`). Prefix matching means every existing
+  theme rule that styled `string.quoted.single` still applies — no
+  visible change in the bundled themes — but custom themes can now
+  specialize on char literals.
+
 ## [0.10.1] — 2026-05-22
 
 ### Added
@@ -249,7 +266,8 @@ While at `0.x`:
 - Initial release: full `bat`-parity (highlighting, git diff, pager,
   config, themes), bundled Rhai grammar, 36 tests, 2.5 MB binary.
 
-[Unreleased]: https://github.com/codedeviate/batty/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/codedeviate/batty/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/codedeviate/batty/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/codedeviate/batty/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/codedeviate/batty/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/codedeviate/batty/compare/v0.9.0...v0.9.1
