@@ -58,7 +58,7 @@ pub fn scroll_viewport(
 #[allow(clippy::too_many_arguments)]
 pub fn run<'a>(
     file_label: &str,
-    contents: &str,
+    contents: String,
     syntax: &'a syntect::parsing::SyntaxReference,
     syntax_set: &'a syntect::parsing::SyntaxSet,
     theme: &'a syntect::highlighting::Theme,
@@ -69,7 +69,10 @@ pub fn run<'a>(
     initial_markdown: bool,
     can_toggle_markdown: bool,
     initial_gutter_visible: bool,
+    autoreload: Option<&Path>,
+    _encoding: Encoding,
 ) -> Result<()> {
+    let contents = contents;
     let total_lines = contents.lines().count().max(1);
     let mut cursor: usize = 1;
     let mut viewport_top: usize = 1;
@@ -91,6 +94,9 @@ pub fn run<'a>(
     // we re-render at the new width.
     let mut markdown_map: Option<Vec<(usize, usize)>> = None;
     let mut last_term_w: usize = 0;
+
+    let mut _watch = autoreload.map(WatchState::seed).transpose()?;
+    let mut _reload_flash: Option<std::time::Instant> = None;
 
     let _guard = TerminalGuard::enter()?;
 
@@ -114,7 +120,7 @@ pub fn run<'a>(
 
         render_frame(
             file_label,
-            contents,
+            &contents,
             syntax,
             syntax_set,
             theme,
@@ -221,7 +227,7 @@ pub fn run<'a>(
                                 // current source-line cursor.
                                 if markdown_map.is_none() {
                                     let r = crate::markdown::render_with_map(
-                                        contents,
+                                        &contents,
                                         last_term_w.max(20),
                                     );
                                     markdown_map = Some(r.map);

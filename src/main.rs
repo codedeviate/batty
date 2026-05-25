@@ -218,9 +218,10 @@ fn run_interactive(
     let initial_markdown = resolve_markdown(args, Some(&path));
     let can_toggle = is_md || initial_markdown;
 
+    let autoreload = if args.live { Some(path.as_path()) } else { None };
     interactive::run(
         &input.display_name(),
-        &contents,
+        contents,
         syntax,
         syntax_set,
         theme,
@@ -231,6 +232,8 @@ fn run_interactive(
         initial_markdown,
         can_toggle,
         !args.no_gutter,
+        autoreload,
+        args.encoding,
     )
 }
 
