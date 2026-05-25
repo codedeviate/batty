@@ -70,10 +70,10 @@ pub fn run<'a>(
     can_toggle_markdown: bool,
     initial_gutter_visible: bool,
     autoreload: Option<&Path>,
-    _encoding: Encoding,
+    encoding: Encoding,
 ) -> Result<()> {
-    let contents = contents;
-    let total_lines = contents.lines().count().max(1);
+    let mut contents = contents;
+    let mut total_lines = contents.lines().count().max(1);
     let mut cursor: usize = 1;
     let mut viewport_top: usize = 1;
     let mut markdown_view: bool = initial_markdown;
@@ -95,8 +95,8 @@ pub fn run<'a>(
     let mut markdown_map: Option<Vec<(usize, usize)>> = None;
     let mut last_term_w: usize = 0;
 
-    let mut _watch = autoreload.map(WatchState::seed).transpose()?;
-    let mut _reload_flash: Option<std::time::Instant> = None;
+    let mut watch = autoreload.map(WatchState::seed).transpose()?;
+    let mut reload_flash: Option<std::time::Instant> = None;
 
     let _guard = TerminalGuard::enter()?;
 
@@ -140,129 +140,147 @@ pub fn run<'a>(
             &mut markdown_map,
         )?;
 
-        match event::read()? {
-            Event::Key(KeyEvent { code, modifiers, .. }) => {
-                if matches!(code, KeyCode::Char('q') | KeyCode::Esc) {
-                    break;
-                }
-                if matches!(code, KeyCode::Char('c')) && modifiers.contains(KeyModifiers::CONTROL) {
-                    break;
-                }
-                match code {
-                    KeyCode::Char('j') | KeyCode::Down => {
-                        if markdown_view {
-                            markdown_scroll = markdown_scroll.saturating_add(1);
-                        } else if cursor < total_lines {
-                            cursor += 1;
-                        }
+        if event::poll(std::time::Duration::from_millis(200))? {
+            match event::read()? {
+                Event::Key(KeyEvent { code, modifiers, .. }) => {
+                    if matches!(code, KeyCode::Char('q') | KeyCode::Esc) {
+                        break;
                     }
-                    KeyCode::Char('k') | KeyCode::Up => {
-                        if markdown_view {
-                            markdown_scroll = markdown_scroll.saturating_sub(1);
-                        } else if cursor > 1 {
-                            cursor -= 1;
-                        }
+                    if matches!(code, KeyCode::Char('c')) && modifiers.contains(KeyModifiers::CONTROL) {
+                        break;
                     }
-                    KeyCode::Char('g') | KeyCode::Home => {
-                        if markdown_view {
-                            markdown_scroll = 0;
-                        } else {
-                            cursor = 1;
-                        }
-                    }
-                    KeyCode::Char('G') | KeyCode::End => {
-                        if markdown_view {
-                            markdown_scroll = usize::MAX; // clamped in render_frame
-                        } else {
-                            cursor = total_lines;
-                        }
-                    }
-                    KeyCode::PageDown => {
-                        if markdown_view {
-                            markdown_scroll = markdown_scroll.saturating_add(body_rows);
-                        } else {
-                            cursor = (cursor + body_rows).min(total_lines);
-                        }
-                    }
-                    KeyCode::PageUp => {
-                        if markdown_view {
-                            markdown_scroll = markdown_scroll.saturating_sub(body_rows);
-                        } else {
-                            cursor = cursor.saturating_sub(body_rows).max(1);
-                        }
-                    }
-                    KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => {
-                        if markdown_view {
-                            markdown_scroll = markdown_scroll.saturating_add(body_rows / 2);
-                        } else {
-                            cursor = (cursor + body_rows / 2).min(total_lines);
-                        }
-                    }
-                    KeyCode::Char('u') if modifiers.contains(KeyModifiers::CONTROL) => {
-                        if markdown_view {
-                            markdown_scroll = markdown_scroll.saturating_sub(body_rows / 2);
-                        } else {
-                            cursor = cursor.saturating_sub(body_rows / 2).max(1);
-                        }
-                    }
-                    KeyCode::Char('m') => {
-                        // Allow toggling either when the file is markdown-detected
-                        // OR we're already in markdown view (so the user can flip
-                        // back even if they forced --markdown on a non-md file).
-                        if can_toggle_markdown || markdown_view {
+                    match code {
+                        KeyCode::Char('j') | KeyCode::Down => {
                             if markdown_view {
-                                // Going markdown → raw: pull the source line from
-                                // the current rendered scroll position.
-                                if let Some(map) = markdown_map.as_ref() {
-                                    let src = crate::markdown::source_line_for_rendered(
-                                        map,
-                                        markdown_scroll,
-                                    );
-                                    cursor = src.clamp(1, total_lines);
-                                }
-                                markdown_view = false;
-                            } else {
-                                // Going raw → markdown: build (or reuse) the map,
-                                // scroll to the rendered row of the block at the
-                                // current source-line cursor.
-                                if markdown_map.is_none() {
-                                    let r = crate::markdown::render_with_map(
-                                        &contents,
-                                        last_term_w.max(20),
-                                    );
-                                    markdown_map = Some(r.map);
-                                }
-                                if let Some(map) = markdown_map.as_ref() {
-                                    markdown_scroll = crate::markdown::rendered_row_for_source(
-                                        map, cursor,
-                                    );
-                                } else {
-                                    markdown_scroll = 0;
-                                }
-                                markdown_view = true;
+                                markdown_scroll = markdown_scroll.saturating_add(1);
+                            } else if cursor < total_lines {
+                                cursor += 1;
                             }
                         }
+                        KeyCode::Char('k') | KeyCode::Up => {
+                            if markdown_view {
+                                markdown_scroll = markdown_scroll.saturating_sub(1);
+                            } else if cursor > 1 {
+                                cursor -= 1;
+                            }
+                        }
+                        KeyCode::Char('g') | KeyCode::Home => {
+                            if markdown_view {
+                                markdown_scroll = 0;
+                            } else {
+                                cursor = 1;
+                            }
+                        }
+                        KeyCode::Char('G') | KeyCode::End => {
+                            if markdown_view {
+                                markdown_scroll = usize::MAX; // clamped in render_frame
+                            } else {
+                                cursor = total_lines;
+                            }
+                        }
+                        KeyCode::PageDown => {
+                            if markdown_view {
+                                markdown_scroll = markdown_scroll.saturating_add(body_rows);
+                            } else {
+                                cursor = (cursor + body_rows).min(total_lines);
+                            }
+                        }
+                        KeyCode::PageUp => {
+                            if markdown_view {
+                                markdown_scroll = markdown_scroll.saturating_sub(body_rows);
+                            } else {
+                                cursor = cursor.saturating_sub(body_rows).max(1);
+                            }
+                        }
+                        KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => {
+                            if markdown_view {
+                                markdown_scroll = markdown_scroll.saturating_add(body_rows / 2);
+                            } else {
+                                cursor = (cursor + body_rows / 2).min(total_lines);
+                            }
+                        }
+                        KeyCode::Char('u') if modifiers.contains(KeyModifiers::CONTROL) => {
+                            if markdown_view {
+                                markdown_scroll = markdown_scroll.saturating_sub(body_rows / 2);
+                            } else {
+                                cursor = cursor.saturating_sub(body_rows / 2).max(1);
+                            }
+                        }
+                        KeyCode::Char('m') => {
+                            // Allow toggling either when the file is markdown-detected
+                            // OR we're already in markdown view (so the user can flip
+                            // back even if they forced --markdown on a non-md file).
+                            if can_toggle_markdown || markdown_view {
+                                if markdown_view {
+                                    // Going markdown → raw: pull the source line from
+                                    // the current rendered scroll position.
+                                    if let Some(map) = markdown_map.as_ref() {
+                                        let src = crate::markdown::source_line_for_rendered(
+                                            map,
+                                            markdown_scroll,
+                                        );
+                                        cursor = src.clamp(1, total_lines);
+                                    }
+                                    markdown_view = false;
+                                } else {
+                                    // Going raw → markdown: build (or reuse) the map,
+                                    // scroll to the rendered row of the block at the
+                                    // current source-line cursor.
+                                    if markdown_map.is_none() {
+                                        let r = crate::markdown::render_with_map(
+                                            &contents,
+                                            last_term_w.max(20),
+                                        );
+                                        markdown_map = Some(r.map);
+                                    }
+                                    if let Some(map) = markdown_map.as_ref() {
+                                        markdown_scroll = crate::markdown::rendered_row_for_source(
+                                            map, cursor,
+                                        );
+                                    } else {
+                                        markdown_scroll = 0;
+                                    }
+                                    markdown_view = true;
+                                }
+                            }
+                        }
+                        KeyCode::Char('n') => {
+                            // Toggle the gutter (line numbers + cursor glyph) live.
+                            gutter_visible = !gutter_visible;
+                        }
+                        // Live top-pad adjustment for terminals that overlay UI on
+                        // the alt-screen's top rows (e.g. Warp). `+` / `=` grow
+                        // the pad by 1 row; `-` shrinks (saturating at 0).
+                        KeyCode::Char('+') | KeyCode::Char('=') => {
+                            top_pad = top_pad.saturating_add(1);
+                        }
+                        KeyCode::Char('-') => {
+                            top_pad = top_pad.saturating_sub(1);
+                        }
+                        _ => {}
                     }
-                    KeyCode::Char('n') => {
-                        // Toggle the gutter (line numbers + cursor glyph) live.
-                        gutter_visible = !gutter_visible;
+                }
+                Event::Resize(_, _) => {
+                    // Loop will recompute body_rows and re-render.
+                }
+                _ => {}
+            }
+        } else {
+            // Timer tick: 200 ms passed with no key event. If autoreload
+            // is enabled, check the file for changes.
+            if let (Some(w), Some(p)) = (watch.as_mut(), autoreload) {
+                match w.poll(p, encoding) {
+                    WatchTick::Unchanged | WatchTick::MetadataOnly => {}
+                    WatchTick::Reloaded(new_contents) => {
+                        contents = new_contents;
+                        total_lines = contents.lines().count().max(1);
+                        cursor = cursor.min(total_lines).max(1);
+                        viewport_top = viewport_top.min(total_lines).max(1);
+                        markdown_map = None;
+                        reload_flash = Some(std::time::Instant::now());
                     }
-                    // Live top-pad adjustment for terminals that overlay UI on
-                    // the alt-screen's top rows (e.g. Warp). `+` / `=` grow
-                    // the pad by 1 row; `-` shrinks (saturating at 0).
-                    KeyCode::Char('+') | KeyCode::Char('=') => {
-                        top_pad = top_pad.saturating_add(1);
-                    }
-                    KeyCode::Char('-') => {
-                        top_pad = top_pad.saturating_sub(1);
-                    }
-                    _ => {}
                 }
             }
-            Event::Resize(_, _) => {
-                // Loop will recompute body_rows and re-render.
-            }
-            _ => {}
         }
     }
 
