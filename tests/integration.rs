@@ -724,6 +724,26 @@ fn no_interactive_overrides_config() {
 }
 
 #[test]
+fn no_live_overrides_config() {
+    // Simulate `live = true` in config; --no-live on the CLI should cancel
+    // it so the static path runs and the file's first line prints.
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = dir.path().join("cfg.toml");
+    std::fs::write(&cfg, "live = true\n").unwrap();
+    let f = dir.path().join("hello.txt");
+    std::fs::write(&f, "hello\n").unwrap();
+    let out = batty()
+        .env("BATTY_CONFIG_PATH", &cfg)
+        .args(["--no-live", "--plain", "--color=never"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let s = String::from_utf8(out.stdout).unwrap();
+    assert!(s.contains("hello"), "stdout: {}", s);
+}
+
+#[test]
 fn duplicate_bool_flags_do_not_conflict() {
     // Config can emit a bool flag that's also passed on the CLI; clap must
     // treat the second occurrence as an override, not an error.
