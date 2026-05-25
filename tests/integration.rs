@@ -363,6 +363,60 @@ fn follow_and_interactive_are_mutually_exclusive() {
 }
 
 #[test]
+fn live_and_interactive_are_mutually_exclusive() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("a.txt");
+    std::fs::write(&f, "x").unwrap();
+    let out = batty().args(["-i", "--live"]).arg(&f).output().unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8(out.stderr).unwrap();
+    assert!(err.contains("mutually exclusive"), "got: {}", err);
+}
+
+#[test]
+fn live_and_follow_are_mutually_exclusive() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("a.txt");
+    std::fs::write(&f, "x").unwrap();
+    let out = batty().args(["-f", "--live"]).arg(&f).output().unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8(out.stderr).unwrap();
+    assert!(err.contains("mutually exclusive"), "got: {}", err);
+}
+
+#[test]
+fn live_rejects_multiple_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let a = dir.path().join("a.txt");
+    let b = dir.path().join("b.txt");
+    std::fs::write(&a, "x").unwrap();
+    std::fs::write(&b, "y").unwrap();
+    let out = batty().arg("--live").arg(&a).arg(&b).output().unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8(out.stderr).unwrap();
+    assert!(err.contains("single file"), "got: {}", err);
+}
+
+#[test]
+fn live_rejects_stdin() {
+    use std::io::Write;
+    use std::process::Stdio;
+    let mut child = batty()
+        .arg("--live")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let _ = child.stdin.as_mut().unwrap().write_all(b"x\n");
+    drop(child.stdin.take());
+    let out = child.wait_with_output().unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8(out.stderr).unwrap();
+    assert!(err.contains("file path"), "got: {}", err);
+}
+
+#[test]
 fn markdown_with_numbers_shows_source_line_in_gutter() {
     let dir = tempfile::tempdir().unwrap();
     let f = dir.path().join("doc.md");
