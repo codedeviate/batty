@@ -13,7 +13,10 @@ use crossterm::{
         enable_raw_mode, size,
     },
 };
+use std::fs;
 use std::io::{Write, stdout};
+use std::path::Path;
+use std::time::SystemTime;
 
 /// RAII guard that puts the terminal into the interactive state on construction
 /// and reliably restores it on Drop, even if a panic unwinds through the loop.
@@ -458,20 +461,16 @@ fn render_frame(
     Ok(())
 }
 
-use std::fs;
-use std::path::Path;
-use std::time::SystemTime;
-
 /// Live-mode file watcher state. Holds enough of the last-seen file to
 /// (a) cheaply gate on mtime+len and (b) confirm content actually changed
 /// via byte comparison when the gate trips.
-pub(crate) struct WatchState {
+struct WatchState {
     mtime: Option<SystemTime>,
     len: u64,
     bytes: Vec<u8>,
 }
 
-pub(crate) enum WatchTick {
+enum WatchTick {
     /// File didn't change (or is briefly unreadable).
     Unchanged,
     /// mtime advanced but bytes are identical (e.g. `touch`, vim `:w` on
@@ -486,7 +485,7 @@ impl WatchState {
     /// already read once for the initial render, but threading the raw
     /// bytes through `interactive::run`'s signature is more invasive than
     /// one extra startup read.
-    pub(crate) fn seed(path: &Path) -> anyhow::Result<Self> {
+    fn seed(path: &Path) -> anyhow::Result<Self> {
         let meta = fs::metadata(path)?;
         let bytes = fs::read(path)?;
         Ok(Self {
@@ -498,7 +497,7 @@ impl WatchState {
 
     /// Check the file. Cheap mtime+len fast path; on suspected change,
     /// re-read and byte-compare to suppress no-op metadata bumps.
-    pub(crate) fn poll(&mut self, path: &Path, encoding: Encoding) -> WatchTick {
+    fn poll(&mut self, path: &Path, encoding: Encoding) -> WatchTick {
         let meta = match fs::metadata(path) {
             Ok(m) => m,
             Err(_) => return WatchTick::Unchanged,
