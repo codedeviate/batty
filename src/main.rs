@@ -73,18 +73,27 @@ fn run() -> Result<()> {
         return Ok(());
     }
 
-    // Interactive (TUI) and follow (streaming) are different output modes
-    // and can't coexist; reject early before either path fires.
+    // Interactive (TUI), live (autoreloading TUI), and follow (streaming)
+    // are different output modes and can't coexist; reject early before
+    // any of them fire.
     if args.interactive && args.follow {
         anyhow::bail!("--interactive and --follow are mutually exclusive");
     }
+    if args.live && args.interactive {
+        anyhow::bail!("--live and --interactive are mutually exclusive");
+    }
+    if args.live && args.follow {
+        anyhow::bail!("--live and --follow are mutually exclusive");
+    }
 
     // --paging=never is treated as a "give me flat output" signal that
-    // also disables interactive mode. This lets users with `interactive =
-    // true` in their config bypass the TUI for a single run by passing
-    // `--paging=never` without having to also remember `--no-interactive`.
+    // also disables interactive/live mode. This lets users with
+    // `interactive = true` (or `live = true`) in their config bypass the
+    // TUI for a single run by passing `--paging=never` without having to
+    // also remember `--no-interactive` / `--no-live`.
     let want_interactive = args.interactive && args.paging != cli::PagingWhen::Never;
-    if want_interactive {
+    let want_live = args.live && args.paging != cli::PagingWhen::Never;
+    if want_interactive || want_live {
         return run_interactive(&args, &syntax_set, &theme_set);
     }
 
@@ -189,12 +198,13 @@ fn run_interactive(
     syntax_set: &syntect::parsing::SyntaxSet,
     theme_set: &syntect::highlighting::ThemeSet,
 ) -> Result<()> {
+    let mode_label = if args.live { "live" } else { "interactive" };
     if args.files.len() > 1 {
-        anyhow::bail!("interactive mode supports a single file");
+        anyhow::bail!("{} mode supports a single file", mode_label);
     }
     let path = match args.files.first() {
         Some(p) if p.as_os_str() != "-" => p.clone(),
-        _ => anyhow::bail!("interactive mode requires a file path"),
+        _ => anyhow::bail!("{} mode requires a file path", mode_label),
     };
     let input = InputKind::from_path(&path);
     let contents = input.read(args.encoding)?;
