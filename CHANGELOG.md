@@ -10,6 +10,21 @@ While at `0.x`:
 
 ## [Unreleased]
 
+## [0.13.1] — 2026-05-25
+
+### Fixed
+
+- `--live` (and `--interactive`): eliminate visible flicker. Each frame
+  used to issue `Clear(ClearType::All)` followed by separate `execute!`
+  calls for the body and status bar; because `execute!` flushes after
+  every call, the terminal briefly showed a fully cleared screen before
+  the new content arrived. Frames are now built with `queue!` and a
+  single trailing flush, so clear + body + status bar reach the
+  terminal as one atomic write. Additionally, the loop no longer
+  re-renders on 200 ms idle ticks — a `needs_render` flag gates the
+  redraw, so the screen is only touched on key events, resize, file
+  reload, or when the `[live · reloaded]` flash expires.
+
 ## [0.13.0] — 2026-05-25
 
 ### Added
@@ -295,7 +310,8 @@ While at `0.x`:
 - Initial release: full `bat`-parity (highlighting, git diff, pager,
   config, themes), bundled Rhai grammar, 36 tests, 2.5 MB binary.
 
-[Unreleased]: https://github.com/codedeviate/batty/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/codedeviate/batty/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/codedeviate/batty/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/codedeviate/batty/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/codedeviate/batty/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/codedeviate/batty/compare/v0.10.1...v0.11.0

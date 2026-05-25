@@ -6,7 +6,7 @@ use anyhow::Result;
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-    execute,
+    execute, queue,
     style::{Attribute, Print, ResetColor, SetAttribute},
     terminal::{
         Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
@@ -100,6 +100,12 @@ pub fn run<'a>(
 
     let mut watch = autoreload.map(WatchState::seed).transpose()?;
     let mut reload_flash: Option<std::time::Instant> = None;
+    // Redraw only when state changed. Re-rendering on every 200ms idle tick
+    // (the previous behavior) caused visible flicker because each frame does
+    // a full Clear+redraw. Set this true after any key/resize/reload, or when
+    // the "[live · reloaded]" flash expires and the status bar needs to drop
+    // the tag.
+    let mut needs_render = true;
 
     let _guard = TerminalGuard::enter()?;
 
@@ -112,6 +118,7 @@ pub fn run<'a>(
         if term_w != last_term_w {
             markdown_map = None;
             last_term_w = term_w;
+            needs_render = true;
         }
         // Reserve last row for the status bar, and `top_pad` rows at the top
         // (e.g., for Warp's overlay).
@@ -121,31 +128,37 @@ pub fn run<'a>(
         viewport_top = scroll_viewport(cursor, viewport_top, body_rows, total_lines);
         let viewport_bot = (viewport_top + body_rows - 1).min(total_lines);
 
-        render_frame(
-            file_label,
-            &contents,
-            syntax,
-            syntax_set,
-            theme,
-            line_numbers,
-            tabs,
-            show_all,
-            cursor,
-            viewport_top,
-            viewport_bot,
-            term_w,
-            term_h,
-            total_lines,
-            top_pad,
-            markdown_view,
-            &mut markdown_scroll,
-            gutter_visible,
-            &mut markdown_map,
-            autoreload.is_some(),
-            reload_flash,
-        )?;
+        if needs_render {
+            render_frame(
+                file_label,
+                &contents,
+                syntax,
+                syntax_set,
+                theme,
+                line_numbers,
+                tabs,
+                show_all,
+                cursor,
+                viewport_top,
+                viewport_bot,
+                term_w,
+                term_h,
+                total_lines,
+                top_pad,
+                markdown_view,
+                &mut markdown_scroll,
+                gutter_visible,
+                &mut markdown_map,
+                autoreload.is_some(),
+                reload_flash,
+            )?;
+            needs_render = false;
+        }
 
         if event::poll(std::time::Duration::from_millis(200))? {
+            // Any event we handle below is a state change; the catch-all
+            // sets this back to false for events we ignore.
+            needs_render = true;
             match event::read()? {
                 Event::Key(KeyEvent { code, modifiers, .. }) => {
                     if matches!(code, KeyCode::Char('q') | KeyCode::Esc) {
@@ -272,7 +285,9 @@ pub fn run<'a>(
             }
         } else {
             // Timer tick: 200 ms passed with no key event. If autoreload
-            // is enabled, check the file for changes.
+            // is enabled, check the file for changes. Only flag a redraw
+            // when something actually changed — idle ticks must not touch
+            // the screen, or the per-frame Clear flickers.
             if let (Some(w), Some(p)) = (watch.as_mut(), autoreload) {
                 match w.poll(p, encoding) {
                     WatchTick::Unchanged | WatchTick::MetadataOnly => {}
@@ -283,7 +298,18 @@ pub fn run<'a>(
                         viewport_top = viewport_top.min(total_lines).max(1);
                         markdown_map = None;
                         reload_flash = Some(std::time::Instant::now());
+                        needs_render = true;
                     }
+                }
+            }
+            // The "[live · reloaded]" tag is shown for 1500 ms after a
+            // reload. When that window elapses, do one final redraw to
+            // swap it back to "[live]" — otherwise the stale tag lingers
+            // until the next key event.
+            if let Some(t) = reload_flash {
+                if t.elapsed() >= std::time::Duration::from_millis(1500) {
+                    reload_flash = None;
+                    needs_render = true;
                 }
             }
         }
@@ -435,7 +461,12 @@ fn render_frame(
     let status_truncated: String = status_label.chars().take(term_w).collect();
     let pad = term_w.saturating_sub(status_truncated.chars().count());
 
-    // Atomic-ish write: clear screen, move to (0,top_pad), write body, then status bar.
+    // Build the whole frame in one buffer and flush once. Using execute! per
+    // step (which flushes between calls) makes the terminal briefly show the
+    // post-Clear blank state before the body arrives — that's visible flicker.
+    // queue! defers I/O; the single flush at the end delivers clear + body +
+    // status bar as one update.
+    //
     // In raw mode, '\n' only moves the cursor down without returning to column 0,
     // which causes a staircase. Translate '\n' → '\r\n' so each line starts fresh.
     let mut crlf_buf: Vec<u8> = Vec::with_capacity(body_bytes.len() + 64);
@@ -446,9 +477,9 @@ fn render_frame(
         crlf_buf.push(b);
     }
     let mut out = stdout().lock();
-    execute!(out, Clear(ClearType::All), MoveTo(0, top_pad))?;
+    queue!(out, Clear(ClearType::All), MoveTo(0, top_pad))?;
     out.write_all(&crlf_buf)?;
-    execute!(
+    queue!(
         out,
         MoveTo(0, term_h.saturating_sub(1) as u16),
         SetAttribute(Attribute::Reverse),
