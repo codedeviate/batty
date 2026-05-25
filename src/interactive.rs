@@ -1,6 +1,6 @@
-use crate::cli::LineNumberStyle;
+use crate::cli::{Encoding, LineNumberStyle};
 use crate::highlight::Highlighter;
-use crate::input::LineRange;
+use crate::input::{LineRange, decode};
 use crate::printer::{PrinterConfig, StyleFlags, print};
 use anyhow::Result;
 use crossterm::{
@@ -417,6 +417,78 @@ fn render_frame(
     Ok(())
 }
 
+use std::fs;
+use std::path::Path;
+use std::time::SystemTime;
+
+/// Live-mode file watcher state. Holds enough of the last-seen file to
+/// (a) cheaply gate on mtime+len and (b) confirm content actually changed
+/// via byte comparison when the gate trips.
+pub(crate) struct WatchState {
+    mtime: Option<SystemTime>,
+    len: u64,
+    bytes: Vec<u8>,
+}
+
+pub(crate) enum WatchTick {
+    /// File didn't change (or is briefly unreadable).
+    Unchanged,
+    /// mtime advanced but bytes are identical (e.g. `touch`, vim `:w` on
+    /// an unchanged buffer). Caller should NOT redraw.
+    MetadataOnly,
+    /// File contents changed; here are the freshly decoded contents.
+    Reloaded(String),
+}
+
+impl WatchState {
+    /// Stat + read the file to capture an initial baseline. main::run
+    /// already read once for the initial render, but threading the raw
+    /// bytes through `interactive::run`'s signature is more invasive than
+    /// one extra startup read.
+    pub(crate) fn seed(path: &Path) -> anyhow::Result<Self> {
+        let meta = fs::metadata(path)?;
+        let bytes = fs::read(path)?;
+        Ok(Self {
+            mtime: meta.modified().ok(),
+            len: meta.len(),
+            bytes,
+        })
+    }
+
+    /// Check the file. Cheap mtime+len fast path; on suspected change,
+    /// re-read and byte-compare to suppress no-op metadata bumps.
+    pub(crate) fn poll(&mut self, path: &Path, encoding: Encoding) -> WatchTick {
+        let meta = match fs::metadata(path) {
+            Ok(m) => m,
+            Err(_) => return WatchTick::Unchanged,
+        };
+        let new_mtime = meta.modified().ok();
+        let new_len = meta.len();
+        if new_mtime == self.mtime && new_len == self.len {
+            return WatchTick::Unchanged;
+        }
+        let new_bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return WatchTick::Unchanged,
+        };
+        if new_bytes == self.bytes {
+            // mtime/len drifted but contents identical — silence future
+            // ticks for the same state.
+            self.mtime = new_mtime;
+            self.len = new_len;
+            return WatchTick::MetadataOnly;
+        }
+        let decoded = match decode(&new_bytes, encoding) {
+            Ok(s) => s,
+            Err(_) => return WatchTick::Unchanged,
+        };
+        self.mtime = new_mtime;
+        self.len = new_len;
+        self.bytes = new_bytes;
+        WatchTick::Reloaded(decoded)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,5 +523,78 @@ mod tests {
     fn scroll_no_change_when_cursor_in_range() {
         // cursor=5, top=1, body=10. Visible 1..10. cursor in range, top unchanged.
         assert_eq!(scroll_viewport(5, 1, 10, 100), 1);
+    }
+
+    use std::io::Write as _;
+    use std::thread::sleep;
+    use std::time::Duration;
+
+    fn write_file(path: &std::path::Path, contents: &[u8]) {
+        let mut f = std::fs::File::create(path).unwrap();
+        f.write_all(contents).unwrap();
+        f.sync_all().unwrap();
+    }
+
+    #[test]
+    fn watch_first_poll_is_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("f.txt");
+        write_file(&p, b"hello\n");
+        let mut w = WatchState::seed(&p).unwrap();
+        assert!(matches!(w.poll(&p, Encoding::Auto), WatchTick::Unchanged));
+    }
+
+    #[test]
+    fn watch_mtime_bump_only_returns_metadata_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("f.txt");
+        write_file(&p, b"hello\n");
+        let mut w = WatchState::seed(&p).unwrap();
+        // Force mtime to advance without changing content.
+        sleep(Duration::from_millis(50));
+        write_file(&p, b"hello\n");
+        match w.poll(&p, Encoding::Auto) {
+            WatchTick::MetadataOnly => {}
+            WatchTick::Unchanged => panic!("expected MetadataOnly, got Unchanged"),
+            WatchTick::Reloaded(_) => panic!("expected MetadataOnly, got Reloaded"),
+        }
+    }
+
+    #[test]
+    fn watch_append_returns_reloaded() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("f.txt");
+        write_file(&p, b"hello\n");
+        let mut w = WatchState::seed(&p).unwrap();
+        sleep(Duration::from_millis(50));
+        write_file(&p, b"hello\nworld\n");
+        match w.poll(&p, Encoding::Auto) {
+            WatchTick::Reloaded(s) => assert_eq!(s, "hello\nworld\n"),
+            _ => panic!("expected Reloaded"),
+        }
+    }
+
+    #[test]
+    fn watch_truncate_returns_reloaded() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("f.txt");
+        write_file(&p, b"hello\nworld\n");
+        let mut w = WatchState::seed(&p).unwrap();
+        sleep(Duration::from_millis(50));
+        write_file(&p, b"hi\n");
+        match w.poll(&p, Encoding::Auto) {
+            WatchTick::Reloaded(s) => assert_eq!(s, "hi\n"),
+            _ => panic!("expected Reloaded"),
+        }
+    }
+
+    #[test]
+    fn watch_missing_file_returns_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("f.txt");
+        write_file(&p, b"hello\n");
+        let mut w = WatchState::seed(&p).unwrap();
+        std::fs::remove_file(&p).unwrap();
+        assert!(matches!(w.poll(&p, Encoding::Auto), WatchTick::Unchanged));
     }
 }
