@@ -138,6 +138,8 @@ pub fn run<'a>(
             &mut markdown_scroll,
             gutter_visible,
             &mut markdown_map,
+            autoreload.is_some(),
+            reload_flash,
         )?;
 
         if event::poll(std::time::Duration::from_millis(200))? {
@@ -308,6 +310,8 @@ fn render_frame(
     markdown_scroll: &mut usize,
     gutter_visible: bool,
     markdown_map: &mut Option<Vec<(usize, usize)>>,
+    live_mode: bool,
+    reload_flash: Option<std::time::Instant>,
 ) -> Result<()> {
     let body_rows = term_h
         .saturating_sub(1 + top_pad as usize)
@@ -400,8 +404,20 @@ fn render_frame(
     } else {
         String::new()
     };
+    let live_tag = if live_mode {
+        let recently_reloaded = reload_flash
+            .map(|t| t.elapsed() < std::time::Duration::from_millis(1500))
+            .unwrap_or(false);
+        if recently_reloaded {
+            "  [live · reloaded]"
+        } else {
+            "  [live]"
+        }
+    } else {
+        ""
+    };
     let status_label = format!(
-        "  {}  {}  ({}){}{}{}  j/k g/G ^d/^u m n +/- q",
+        "  {}  {}  ({}){}{}{}{}  j/k g/G ^d/^u m n +/- q",
         file_label,
         position_label,
         match line_numbers {
@@ -411,6 +427,7 @@ fn render_frame(
         mode_tag,
         gutter_tag,
         pad_tag,
+        live_tag,
     );
     let status_truncated: String = status_label.chars().take(term_w).collect();
     let pad = term_w.saturating_sub(status_truncated.chars().count());
