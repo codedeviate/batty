@@ -55,6 +55,11 @@ entry rather than leaving a crossed-out line here.
 - **`--wrap` is forced off in interactive mode.** Long lines truncate at the terminal edge. Honoring `--wrap` here would let one source line span multiple visual rows, which breaks the cursor / viewport / status-bar math (all currently 1 source line = 1 row). A proper fix needs per-visual-row scrolling; deferred until someone asks.
 - **Horizontal scroll** for long lines that exceed the terminal width when `--wrap` is off — they're truncated by the terminal.
 
+### Live mode
+
+- **Multi-file `--live`.** Single-file only, matching `--interactive` and `--follow`. Watching a glob and presenting a unified or tabbed view of multiple files would require redesigning the interactive event loop (currently single-file).
+- **Filesystem-event watching.** Live mode polls every 200 ms via `fs::metadata`. A `notify` / `inotify` / `kqueue` / `FSEvents` watcher would deliver changes immediately at the cost of a fairly heavy dep + per-platform code. The 200 ms cadence is fine for human-scale edits.
+
 ### Follow / tail mode
 
 - **Low-latency file watching.** v1 polls every 200 ms via `fs::metadata`. A real `notify` / `inotify` / `kqueue` / `FSEvents` watcher would deliver appended bytes immediately at the cost of a fairly heavy dep + per-platform code.

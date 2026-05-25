@@ -1,7 +1,7 @@
 .\" Manpage for batty.
 .\" Keep in sync with src/cli.rs, README.md, and CLAUDE.md (see "Keep the
 .\" man page in sync" convention).
-.TH BATTY 1 "2026-05-24" "batty 0.12.0" "User Commands"
+.TH BATTY 1 "2026-05-25" "batty 0.13.0" "User Commands"
 .SH NAME
 batty \- a cat clone with syntax highlighting, git diff markers, and a TUI
 .SH SYNOPSIS
@@ -107,6 +107,15 @@ List supported languages and exit.
 .B \-\-list-themes
 List supported themes and exit.
 .TP
+.B \-\-live
+Live mode: alt-screen TUI that re-renders the file whenever its
+contents change. Same keybindings as
+.BR \-\-interactive .
+Single file only; no stdin. Mutually exclusive with
+.B \-\-interactive
+and
+.BR \-\-follow .
+.TP
 .BR \-m ", " \-\-markdown
 Render Markdown files instead of showing the raw source. Works for any file.
 .TP
@@ -134,6 +143,11 @@ than
 Disable interactive mode. Overrides
 .B interactive = true
 in the config.
+.TP
+.B \-\-no-live
+Disable live mode. Overrides
+.B live = true
+in the config file.
 .TP
 .B \-\-no-markdown
 Disable Markdown rendering. Overrides
@@ -251,6 +265,11 @@ live (useful for terminals with shifting top overlays).
 .B q
 Quit.
 .RE
+.PP
+The same keybindings apply in
+.B \-\-live
+mode; the only difference is that the file is automatically reloaded
+when its contents change on disk.
 .SH CONFIG
 .B batty
 reads a TOML config at
@@ -267,6 +286,7 @@ top-pad          = 2
 line-numbers     = "relative"
 markdown-on-extension = true
 highlight-line   = [10, 20]
+live             = false       # autoreload TUI
 .fi
 .RE
 .PP

@@ -10,6 +10,21 @@ While at `0.x`:
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-05-25
+
+### Added
+
+- `--live` (and `live = true` in config): new alt-screen TUI mode that
+  re-renders the file whenever its contents change. Same keybindings as
+  `--interactive` (j/k, g/G, Ctrl-d/u, PgUp/PgDn, m, n, +/-, q). Cursor
+  and scroll position are preserved across reloads (clamped if the file
+  shrinks). Mutually exclusive with `--interactive` and `--follow`;
+  single-file only; no stdin. Change detection uses an mtime+len fast
+  path followed by a byte compare, so `touch` and `vim :w` on an
+  unchanged buffer do not cause spurious redraws. Status bar shows
+  `[live]`, flashing `[live · reloaded]` for 1.5 s after each reload.
+  Add `--no-live` to override `live = true` in config.
+
 ## [0.12.0] — 2026-05-24
 
 ### Added
@@ -280,7 +295,8 @@ While at `0.x`:
 - Initial release: full `bat`-parity (highlighting, git diff, pager,
   config, themes), bundled Rhai grammar, 36 tests, 2.5 MB binary.
 
-[Unreleased]: https://github.com/codedeviate/batty/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/codedeviate/batty/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/codedeviate/batty/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/codedeviate/batty/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/codedeviate/batty/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/codedeviate/batty/compare/v0.10.0...v0.10.1

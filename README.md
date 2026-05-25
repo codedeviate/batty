@@ -15,6 +15,7 @@ A from-scratch Rust clone of [`bat`](https://github.com/sharkdp/bat) — `cat` w
 - **Vim-style relative line numbers** — center distances on a cursor.
 - **Markdown rendering** (`-m`) — render Markdown like `glow`, with a `m` toggle in interactive mode.
 - **Tail / follow mode** (`-f`) — `tail -f` semantics with syntax highlighting.
+- **Live mode** (`--live`) — alt-screen TUI that re-renders on any file change. Same keys as `-i`; cursor + scroll position preserved across reloads.
 - **Colorized `--examples`** — curated, copy-pasteable scenarios for every common flag.
 - **Man page** — install `man/batty.1` to your `MANPATH` for `man batty`.
 - **TOML config** — `~/.config/batty/config.toml`.
@@ -142,6 +143,15 @@ When `--markdown` is on, the gutter shows the **source-line number** of each top
 | `--no-interactive`  | Disable interactive mode. Overrides `interactive = true` in the config.                                                  |
 | `--top-pad <N>`     | Reserve N rows at the top of the screen. _Default: 0._ Use `2` in [Warp](https://www.warp.dev/) to dodge its UI overlay. |
 
+### Live mode
+
+| Flag         | Description                                                                                                                                                                                                                                            |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--live`     | Alt-screen TUI that re-renders the file on any content change. Same keybindings as `-i` (j/k, g/G, Ctrl-d/u, m, n, +/-, q). Cursor + scroll position preserved across reloads (clamped if the file shrinks). Single file only; no stdin. Mutually exclusive with `--interactive` and `--follow`. |
+| `--no-live`  | Disable live mode. Overrides `live = true` in the config.                                                                                                                                                                                              |
+
+Detection: cheap mtime+len gate, then a byte compare to suppress `touch` / vim `:w` no-ops. Polled every 200 ms. The status bar shows `[live]`, flashing `[live · reloaded]` for 1.5 s after each reload.
+
 ### Tail / follow
 
 | Flag               | Description                                                                                                                                                                                                                                  |
@@ -194,6 +204,7 @@ markdown       = false       # true → render every file as markdown
 markdown-on-extension = true # true → render only .md / .markdown files
 no-gutter      = false       # true → hide line numbers / changes / grid by default
 follow         = false       # set true to default to tail mode
+live           = false       # set true to default to live mode (alt-screen autoreload)
 tail-lines     = 10
 highlight-line = [10, 20]
 encoding       = "auto"      # "utf-8" | "iso-8859-1" | "auto" (default)

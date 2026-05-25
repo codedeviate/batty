@@ -122,6 +122,11 @@ fn render<W: Write>(w: &mut W, c: bool) -> io::Result<()> {
     example(w, c, "Reserve top rows (useful for Warp's overlay)", &[
         "batty -i --top-pad=2 src/main.rs",
     ])?;
+    example(w, c, "Live mode: same TUI, autoreload on any file change", &[
+        "batty --live src/lib.rs",
+        "batty --live ~/.config/batty/config.toml",
+    ])?;
+    note(w, c, "Single file only. Status bar shows [live · reloaded] after each reload. Use --no-live to override `live = true` in config.")?;
 
     section(w, c, "ENCODING / WRAPPING")?;
 
