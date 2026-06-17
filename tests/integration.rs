@@ -1016,3 +1016,122 @@ fn wrap_word_breaks_at_space_in_real_output() {
         );
     }
 }
+
+/// Regression test for the interactive/live long-line bug fixed in 0.13.2:
+/// a source line wider than the terminal must be truncated to a single
+/// visual row, not soft-wrapped. If it wraps, the extra rows overflow past
+/// the status bar and the terminal scrolls the top lines off the alt-screen
+/// — the reported symptom "if three lines break, the first visible line is 4".
+///
+/// Verifying alt-screen behavior needs a real terminal emulator (the scroll
+/// is the *terminal's* reaction to overflow, not visible in batty's output
+/// bytes), so this drives `batty -i` inside a fixed 40x20 tmux session and
+/// inspects the rendered screen. Skips (passes) when tmux isn't installed.
+#[test]
+fn interactive_long_lines_keep_top_line_visible() {
+    // Skip gracefully where tmux isn't available (minimal CI images, etc.).
+    let tmux_ok = Command::new("tmux")
+        .arg("-V")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if !tmux_ok {
+        eprintln!("skipping interactive_long_lines_keep_top_line_visible: tmux not available");
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("longlines.txt");
+    // Lines 1-3 are far wider than 40 cols (they would wrap to several rows if
+    // not truncated); lines 4+ are short. Each line's text starts with its own
+    // number so we can tell which source line is on top.
+    let mut body = String::new();
+    for n in 1..=3 {
+        body.push_str(&format!("L{:02} {}\n", n, "x".repeat(110)));
+    }
+    for n in 4..=30 {
+        body.push_str(&format!("L{:02} short line\n", n));
+    }
+    std::fs::write(&f, &body).unwrap();
+
+    let session = format!("battyreg_{}", std::process::id());
+    let tmux = |args: &[&str]| Command::new("tmux").args(args).output().unwrap();
+
+    // Clear any stale session, then open a real 40x20 terminal. Uses the
+    // per-user tmux server but only ever touches our own uniquely-named
+    // session, so it won't disturb the developer's running sessions.
+    let _ = tmux(&["kill-session", "-t", &session]);
+    assert!(
+        tmux(&["new-session", "-d", "-s", &session, "-x", "40", "-y", "20"])
+            .status
+            .success(),
+        "failed to create tmux session"
+    );
+
+    // Launch batty interactively with a hermetic config. `env VAR=...` form
+    // works across all login shells (unlike inline `VAR=... cmd` in fish).
+    let cmd = format!(
+        "env BATTY_CONFIG_PATH=/dev/null '{}' -i '{}'",
+        env!("CARGO_BIN_EXE_batty"),
+        f.display()
+    );
+    tmux(&["send-keys", "-t", &session, &cmd, "Enter"]);
+
+    // Poll the rendered screen until source line 1 appears on the top row (or
+    // time out). Under the bug "L01" never reaches the top row — it scrolls off.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut screen = String::new();
+    while std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let out = tmux(&["capture-pane", "-t", &session, "-p"]);
+        screen = String::from_utf8_lossy(&out.stdout).to_string();
+        if screen
+            .lines()
+            .next()
+            .map(|r| r.contains("L01"))
+            .unwrap_or(false)
+        {
+            break;
+        }
+    }
+
+    // Tear the session down BEFORE asserting so a failure can't leak it.
+    let _ = tmux(&["kill-session", "-t", &session]);
+
+    let rows: Vec<&str> = screen.lines().collect();
+    let first = rows.first().copied().unwrap_or("");
+    // The fix: line 1 — with its gutter number and cursor glyph — is the top row.
+    assert!(
+        first.contains("L01"),
+        "first visible row should be source line 1, got: {:?}\nfull screen:\n{}",
+        first,
+        screen
+    );
+    assert!(
+        first.contains('▶'),
+        "first row should carry the line-1 cursor glyph: {:?}",
+        first
+    );
+    // Lines 2 and 3 (also long) follow one per row — confirms truncation, not
+    // wrapping; wrapped rows would push these down or off the screen.
+    assert!(
+        rows.get(1).map(|r| r.contains("L02")).unwrap_or(false),
+        "row 2 should be source line 2: {:?}",
+        rows.get(1)
+    );
+    assert!(
+        rows.get(2).map(|r| r.contains("L03")).unwrap_or(false),
+        "row 3 should be source line 3: {:?}",
+        rows.get(2)
+    );
+    // (The status bar's "line 1/30" isn't asserted: the tempdir path can fill
+    // the whole 40-col bar and truncate the position label off the right edge.)
+    // No rendered row exceeds the 40-column terminal width.
+    for r in &rows {
+        assert!(
+            r.chars().count() <= 40,
+            "row wider than the terminal (would wrap): {:?}",
+            r
+        );
+    }
+}
