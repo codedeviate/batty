@@ -52,8 +52,8 @@ entry rather than leaving a crossed-out line here.
 - **Mouse support** — keyboard only. No click-to-position-cursor, no scroll-wheel.
 - **Mouse-driven link follow** in markdown view — also keyboard-only.
 - **Multiple files in one session.** Today `-i` rejects `>1` file. A tabstrip / `:n` `:p` switching would be a fair amount of work.
-- **`--wrap` is forced off in interactive mode.** Long lines truncate at the terminal edge. Honoring `--wrap` here would let one source line span multiple visual rows, which breaks the cursor / viewport / status-bar math (all currently 1 source line = 1 row). A proper fix needs per-visual-row scrolling; deferred until someone asks.
-- **Horizontal scroll** for long lines that exceed the terminal width when `--wrap` is off — they're truncated by the terminal.
+- **`--wrap` is forced off in interactive and live modes.** Long lines are truncated at the terminal edge (by the renderer, ANSI-aware — see `printer::truncate_to_visible_width`). Honoring `--wrap` here would let one source line span multiple visual rows, which breaks the cursor / viewport / status-bar math (all currently 1 source line = 1 row). A proper fix needs per-visual-row scrolling; deferred until someone asks.
+- **Horizontal scroll** for long lines that exceed the terminal width when `--wrap` is off — they're truncated at the terminal edge.
 
 ### Live mode
 

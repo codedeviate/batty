@@ -10,6 +10,21 @@ While at `0.x`:
 
 ## [Unreleased]
 
+## [0.13.2] — 2026-06-17
+
+### Fixed
+
+- `--live` (and `--interactive`): long lines no longer push the top rows
+  off the screen. Interactive and live modes force `wrap=Never`, whose
+  job is to keep one source line on one visual row — but `Never` emits
+  each line in full, so any line wider than the terminal was soft-wrapped
+  by the *terminal* onto extra rows. Those extra rows overflowed past the
+  status bar and scrolled the alt-screen up, so with three wrapped lines
+  near the top the first visible line became line 4. Each body line is now
+  truncated to the terminal width (ANSI-aware, never splitting a wide
+  char, re-emitting `RESET` when color is cut) before it's drawn, so the
+  one-line-one-row viewport invariant holds.
+
 ## [0.13.1] — 2026-05-25
 
 ### Fixed
@@ -310,7 +325,8 @@ While at `0.x`:
 - Initial release: full `bat`-parity (highlighting, git diff, pager,
   config, themes), bundled Rhai grammar, 36 tests, 2.5 MB binary.
 
-[Unreleased]: https://github.com/codedeviate/batty/compare/v0.13.1...HEAD
+[Unreleased]: https://github.com/codedeviate/batty/compare/v0.13.2...HEAD
+[0.13.2]: https://github.com/codedeviate/batty/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/codedeviate/batty/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/codedeviate/batty/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/codedeviate/batty/compare/v0.11.0...v0.12.0

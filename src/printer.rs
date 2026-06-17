@@ -473,6 +473,53 @@ fn wrap_with_continuation(
     out
 }
 
+/// Truncate an already-rendered (ANSI-escaped) line to at most `max_cols`
+/// visible columns. ANSI escape sequences pass through without counting
+/// toward the column total; a wide char that would straddle the boundary is
+/// dropped whole rather than split. If any visible content is cut, a `RESET`
+/// is appended so leftover SGR (color / INVERT) doesn't bleed past the cut.
+///
+/// Interactive and live modes force `wrap=Never` (the viewport math assumes
+/// one source line = one visual row). But `Never` emits each line in full,
+/// so a line wider than the terminal would be wrapped by the *terminal*,
+/// adding rows the viewport doesn't account for and scrolling the top of the
+/// alt-screen off. Callers truncate each visual line with this to keep the
+/// one-line-one-row invariant. Input must not contain newlines — split first.
+pub fn truncate_to_visible_width(line: &str, max_cols: usize) -> String {
+    use unicode_width::UnicodeWidthChar;
+    let mut out = String::with_capacity(line.len());
+    let mut col = 0usize;
+    let mut in_escape = false;
+    let mut saw_sgr = false;
+    let mut cut = false;
+    for ch in line.chars() {
+        if in_escape {
+            out.push(ch);
+            if ch == 'm' {
+                in_escape = false;
+            }
+            continue;
+        }
+        if ch == '\x1b' {
+            in_escape = true;
+            saw_sgr = true;
+            out.push(ch);
+            continue;
+        }
+        let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if col + w > max_cols {
+            cut = true;
+            break;
+        }
+        out.push(ch);
+        col += w;
+    }
+    if cut && saw_sgr {
+        out.push_str(RESET);
+    }
+    out
+}
+
 fn expand_tabs(s: &str, width: usize) -> String {
     if width == 0 { return s.to_string(); }
     use unicode_width::UnicodeWidthChar;
@@ -573,6 +620,40 @@ mod tests {
         let s = "this string is exactly twenty-eight chars long";
         let out = wrap_with_continuation(s, 10, "  ", WrapMode::Never, "");
         assert_eq!(out, s);
+    }
+
+    #[test]
+    fn truncate_keeps_short_line_intact() {
+        assert_eq!(truncate_to_visible_width("hello", 10), "hello");
+        // Exactly the width fits (terminals defer wrap until the next cell).
+        assert_eq!(truncate_to_visible_width("hello", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_cuts_long_plain_line() {
+        assert_eq!(truncate_to_visible_width("abcdefghij", 4), "abcd");
+    }
+
+    #[test]
+    fn truncate_passes_ansi_without_counting() {
+        // 4 visible chars fit in width 4; nothing cut, escapes preserved.
+        let line = "\x1b[31mabcd\x1b[0m";
+        assert_eq!(truncate_to_visible_width(line, 4), "\x1b[31mabcd\x1b[0m");
+    }
+
+    #[test]
+    fn truncate_appends_reset_when_color_cut() {
+        // Color started but the trailing content is cut → re-emit RESET so it
+        // doesn't bleed onto the next terminal row.
+        assert_eq!(truncate_to_visible_width("\x1b[31mabcdef", 3), "\x1b[31mabc\x1b[0m");
+    }
+
+    #[test]
+    fn truncate_does_not_split_wide_char() {
+        // 中/文 are width 2. "a"(1)+中(2)=3 fits at width 3; 文 would overflow.
+        assert_eq!(truncate_to_visible_width("a中文", 3), "a中");
+        // A single wide char that can't fit in 1 column is dropped entirely.
+        assert_eq!(truncate_to_visible_width("中", 1), "");
     }
 
     #[test]

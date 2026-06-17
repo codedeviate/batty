@@ -461,6 +461,23 @@ fn render_frame(
     let status_truncated: String = status_label.chars().take(term_w).collect();
     let pad = term_w.saturating_sub(status_truncated.chars().count());
 
+    // Every emitted body line must occupy exactly one terminal row, or the
+    // viewport math (1 source line = 1 visual row) breaks: wrap is forced to
+    // Never, which emits long lines in full, so the *terminal* would wrap any
+    // line wider than term_w onto extra rows — overflowing past the status bar
+    // and scrolling the top lines off the alt-screen. Truncate each visual
+    // line to term_w (ANSI-aware) to keep the invariant. Markdown rows are
+    // already wrapped to width, so this is a no-op there.
+    let body_text = String::from_utf8_lossy(&body_bytes);
+    let mut clipped = String::with_capacity(body_text.len());
+    for (i, line) in body_text.split('\n').enumerate() {
+        if i > 0 {
+            clipped.push('\n');
+        }
+        clipped.push_str(&crate::printer::truncate_to_visible_width(line, term_w));
+    }
+    let body_bytes = clipped.into_bytes();
+
     // Build the whole frame in one buffer and flush once. Using execute! per
     // step (which flushes between calls) makes the terminal briefly show the
     // post-Clear blank state before the body arrives — that's visible flicker.
