@@ -1135,3 +1135,109 @@ fn interactive_long_lines_keep_top_line_visible() {
         );
     }
 }
+
+/// Pressing `w` in interactive mode soft-wraps long lines: overflow continues
+/// on the next visual row with a blank line-number gutter, the top row stays
+/// source line 1, and no text is cut at the terminal edge. Complements the
+/// wrap-OFF regression `interactive_long_lines_keep_top_line_visible`.
+/// Skips (passes) when tmux isn't installed.
+#[test]
+fn interactive_soft_wrap_continues_long_line() {
+    let tmux_ok = Command::new("tmux")
+        .arg("-V")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if !tmux_ok {
+        eprintln!("skipping interactive_soft_wrap_continues_long_line: tmux not available");
+        return;
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("wrap.txt");
+    // Line 1 is far wider than 40 cols; lines 2+ are short so we can tell a
+    // wrapped continuation row (x's) from the real source line 2.
+    let mut body = format!("L01 {}\n", "x".repeat(80));
+    for n in 2..=6 {
+        body.push_str(&format!("L{:02} short\n", n));
+    }
+    std::fs::write(&f, &body).unwrap();
+
+    let session = format!("battywrap_{}", std::process::id());
+    let tmux = |args: &[&str]| Command::new("tmux").args(args).output().unwrap();
+
+    let _ = tmux(&["kill-session", "-t", &session]);
+    assert!(
+        tmux(&["new-session", "-d", "-s", &session, "-x", "40", "-y", "20"])
+            .status
+            .success(),
+        "failed to create tmux session"
+    );
+    let cmd = format!(
+        "env BATTY_CONFIG_PATH=/dev/null '{}' -i '{}'",
+        env!("CARGO_BIN_EXE_batty"),
+        f.display()
+    );
+    tmux(&["send-keys", "-t", &session, &cmd, "Enter"]);
+    std::thread::sleep(std::time::Duration::from_millis(700));
+    // Toggle wrap on.
+    tmux(&["send-keys", "-t", &session, "w"]);
+
+    // Poll until row 2 becomes a wrapped continuation row (leading blank gutter
+    // then 'x'); under the bug it would stay the truncated source line 2.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut screen = String::new();
+    while std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let out = tmux(&["capture-pane", "-t", &session, "-p"]);
+        screen = String::from_utf8_lossy(&out.stdout).to_string();
+        let rows: Vec<&str> = screen.lines().collect();
+        if rows
+            .get(1)
+            .map(|r| r.starts_with(' ') && r.trim_start().starts_with('x'))
+            .unwrap_or(false)
+        {
+            break;
+        }
+    }
+
+    let _ = tmux(&["kill-session", "-t", &session]);
+
+    let rows: Vec<&str> = screen.lines().collect();
+    let r0 = rows.first().copied().unwrap_or("");
+    let r1 = rows.get(1).copied().unwrap_or("");
+    // Top row: numbered source line 1 with the cursor glyph.
+    assert!(
+        r0.contains("L01") && r0.contains('▶'),
+        "row 0 should be numbered source line 1: {:?}\nscreen:\n{}",
+        r0,
+        screen
+    );
+    // Row 1: a continuation row — blank gutter (leading spaces), overflow x's,
+    // no line number, no cursor glyph, no "L01" prefix.
+    assert!(
+        r1.starts_with(' ') && r1.trim_start().starts_with('x'),
+        "row 1 should be a blank-gutter continuation of x's: {:?}\nscreen:\n{}",
+        r1,
+        screen
+    );
+    assert!(
+        !r1.contains('▶') && !r1.contains("L01"),
+        "continuation row must not repeat the gutter/number: {:?}",
+        r1
+    );
+    // The real source line 2 still appears (below the continuations), not lost.
+    assert!(
+        screen.contains("L02 short"),
+        "source line 2 should remain visible: {}",
+        screen
+    );
+    // No row exceeds the 40-col terminal.
+    for r in &rows {
+        assert!(
+            r.chars().count() <= 40,
+            "row wider than terminal: {:?}",
+            r
+        );
+    }
+}
