@@ -1,4 +1,4 @@
-use crate::cli::{Encoding, LineNumberStyle};
+use crate::cli::{Encoding, LineNumberStyle, WrapMode};
 use crate::highlight::Highlighter;
 use crate::input::{LineRange, decode};
 use crate::printer::{PrinterConfig, StyleFlags, print};
@@ -121,6 +121,21 @@ pub fn step_by_rows(
     c
 }
 
+/// Visual-row count for a 1-based source line at the current body width.
+/// Pulls the line out of `contents` (cheap for viewport-sized ranges) and
+/// defers to the printer's measurement so it matches the real render.
+fn rows_of_line(
+    contents: &str,
+    line: usize,
+    body_width: usize,
+    tabs: usize,
+    show_all: bool,
+    mode: WrapMode,
+) -> usize {
+    let text = contents.lines().nth(line.saturating_sub(1)).unwrap_or("");
+    crate::printer::visual_row_count(text, body_width, tabs, show_all, mode)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn run<'a>(
     file_label: &str,
@@ -137,6 +152,7 @@ pub fn run<'a>(
     initial_gutter_visible: bool,
     autoreload: Option<&Path>,
     encoding: Encoding,
+    wrap: WrapMode,
 ) -> Result<()> {
     let mut contents = contents;
     let mut total_lines = contents.lines().count().max(1);
@@ -154,6 +170,16 @@ pub fn run<'a>(
     // Runtime gutter visibility. Initial value comes from --gutter / --no-gutter
     // (or the resolved config value); `n` flips it live.
     let mut gutter_visible: bool = initial_gutter_visible;
+    // Soft-wrap state. Initial on/off keys off the *raw* --wrap value (not the
+    // TTY-resolved one): character/word start on, auto/never start off. The
+    // `w` key flips it live. wrap_mode is fixed for the session — word only
+    // when the user passed --wrap=word, otherwise character.
+    let mut wrap_on: bool = matches!(wrap, WrapMode::Character | WrapMode::Word);
+    let wrap_mode: WrapMode = if matches!(wrap, WrapMode::Word) {
+        WrapMode::Word
+    } else {
+        WrapMode::Character
+    };
     // Cache of (rendered_row, source_line) tuples for the current markdown
     // render. Built when entering markdown view so m-toggles can preserve
     // scroll position between raw and rendered views. Cleared on resize so
@@ -188,7 +214,19 @@ pub fn run<'a>(
         let body_rows = term_h
             .saturating_sub(1 + top_pad as usize)
             .max(1);
-        viewport_top = scroll_viewport(cursor, viewport_top, body_rows, total_lines);
+        // Gutter / body-width geometry, mirrored from the printer so wrap
+        // measurement matches the real render. Interactive raw view shows a
+        // line-number cell + cursor-glyph cell when the gutter is visible.
+        let line_no_width = total_lines.to_string().len().max(4);
+        let gutter_w = if gutter_visible { line_no_width + 1 + 2 } else { 0 };
+        let body_width = term_w.saturating_sub(gutter_w);
+        viewport_top = if wrap_on && !markdown_view {
+            scroll_viewport_wrapped(cursor, viewport_top, body_rows, |l| {
+                rows_of_line(&contents, l, body_width, tabs, show_all, wrap_mode)
+            })
+        } else {
+            scroll_viewport(cursor, viewport_top, body_rows, total_lines)
+        };
         let viewport_bot = (viewport_top + body_rows - 1).min(total_lines);
 
         if needs_render {
@@ -214,6 +252,8 @@ pub fn run<'a>(
                 &mut markdown_map,
                 autoreload.is_some(),
                 reload_flash,
+                wrap_on,
+                wrap_mode,
             )?;
             needs_render = false;
         }
@@ -262,6 +302,10 @@ pub fn run<'a>(
                         KeyCode::PageDown => {
                             if markdown_view {
                                 markdown_scroll = markdown_scroll.saturating_add(body_rows);
+                            } else if wrap_on {
+                                cursor = step_by_rows(cursor, body_rows, total_lines, true, |l| {
+                                    rows_of_line(&contents, l, body_width, tabs, show_all, wrap_mode)
+                                });
                             } else {
                                 cursor = (cursor + body_rows).min(total_lines);
                             }
@@ -269,6 +313,10 @@ pub fn run<'a>(
                         KeyCode::PageUp => {
                             if markdown_view {
                                 markdown_scroll = markdown_scroll.saturating_sub(body_rows);
+                            } else if wrap_on {
+                                cursor = step_by_rows(cursor, body_rows, total_lines, false, |l| {
+                                    rows_of_line(&contents, l, body_width, tabs, show_all, wrap_mode)
+                                });
                             } else {
                                 cursor = cursor.saturating_sub(body_rows).max(1);
                             }
@@ -276,6 +324,10 @@ pub fn run<'a>(
                         KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => {
                             if markdown_view {
                                 markdown_scroll = markdown_scroll.saturating_add(body_rows / 2);
+                            } else if wrap_on {
+                                cursor = step_by_rows(cursor, body_rows / 2, total_lines, true, |l| {
+                                    rows_of_line(&contents, l, body_width, tabs, show_all, wrap_mode)
+                                });
                             } else {
                                 cursor = (cursor + body_rows / 2).min(total_lines);
                             }
@@ -283,6 +335,10 @@ pub fn run<'a>(
                         KeyCode::Char('u') if modifiers.contains(KeyModifiers::CONTROL) => {
                             if markdown_view {
                                 markdown_scroll = markdown_scroll.saturating_sub(body_rows / 2);
+                            } else if wrap_on {
+                                cursor = step_by_rows(cursor, body_rows / 2, total_lines, false, |l| {
+                                    rows_of_line(&contents, l, body_width, tabs, show_all, wrap_mode)
+                                });
                             } else {
                                 cursor = cursor.saturating_sub(body_rows / 2).max(1);
                             }
@@ -328,6 +384,12 @@ pub fn run<'a>(
                         KeyCode::Char('n') => {
                             // Toggle the gutter (line numbers + cursor glyph) live.
                             gutter_visible = !gutter_visible;
+                        }
+                        KeyCode::Char('w') => {
+                            // Toggle soft-wrap (raw view only; markdown already wraps).
+                            if !markdown_view {
+                                wrap_on = !wrap_on;
+                            }
                         }
                         // Live top-pad adjustment for terminals that overlay UI on
                         // the alt-screen's top rows (e.g. Warp). `+` / `=` grow
@@ -404,6 +466,8 @@ fn render_frame(
     markdown_map: &mut Option<Vec<(usize, usize)>>,
     live_mode: bool,
     reload_flash: Option<std::time::Instant>,
+    wrap_on: bool,
+    wrap_mode: WrapMode,
 ) -> Result<()> {
     let body_rows = term_h
         .saturating_sub(1 + top_pad as usize)
@@ -458,19 +522,44 @@ fn render_frame(
             changes: false,
             snip: false,
         };
+        // When wrapping, viewport_bot (a source-line count) is too small —
+        // each line spans several rows. Extend the range until we have at
+        // least body_rows visual rows (or hit EOF); the buffer is clipped to
+        // exactly body_rows rows after rendering.
+        let line_no_width = total_lines.to_string().len().max(4);
+        let gutter_w = if gutter_visible { line_no_width + 1 + 2 } else { 0 };
+        let body_width = term_w.saturating_sub(gutter_w);
+        let render_end = if wrap_on {
+            let mut acc = 0usize;
+            let mut last = viewport_top;
+            let mut l = viewport_top;
+            while l <= total_lines {
+                acc += crate::printer::visual_row_count(
+                    contents.lines().nth(l - 1).unwrap_or(""),
+                    body_width,
+                    tabs,
+                    show_all,
+                    wrap_mode,
+                );
+                last = l;
+                if acc >= body_rows {
+                    break;
+                }
+                l += 1;
+            }
+            last
+        } else {
+            viewport_bot
+        };
         let cfg = PrinterConfig {
             style,
             line_range: Some(LineRange {
                 start: viewport_top,
-                end: viewport_bot,
+                end: render_end,
             }),
             highlight_lines,
             tabs,
-            // Interactive mode forces wrap=Never. Wrapping in raw-mode
-            // alt-screen would let one source line span multiple visual
-            // rows, breaking the viewport math (cursor / scroll / status
-            // bar). Long lines truncate at the terminal edge; documented.
-            wrap: crate::cli::WrapMode::Never,
+            wrap: if wrap_on { wrap_mode } else { crate::cli::WrapMode::Never },
             show_all,
             use_color: true,
             width: term_w,
@@ -491,6 +580,7 @@ fn render_frame(
     // and key hints.
     let mode_tag = if markdown_view { "  [md]" } else { "" };
     let gutter_tag = if !gutter_visible { "  no-gutter" } else { "" };
+    let wrap_tag = if wrap_on { "  wrap" } else { "" };
     let pad_tag = if top_pad > 0 {
         format!("  pad={}", top_pad)
     } else {
@@ -509,7 +599,7 @@ fn render_frame(
         ""
     };
     let status_label = format!(
-        "  {}  {}  ({}){}{}{}{}  j/k g/G ^d/^u m n +/- q",
+        "  {}  {}  ({}){}{}{}{}{}  j/k g/G ^d/^u m n w +/- q",
         file_label,
         position_label,
         match line_numbers {
@@ -518,28 +608,42 @@ fn render_frame(
         },
         mode_tag,
         gutter_tag,
+        wrap_tag,
         pad_tag,
         live_tag,
     );
     let status_truncated: String = status_label.chars().take(term_w).collect();
     let pad = term_w.saturating_sub(status_truncated.chars().count());
 
-    // Every emitted body line must occupy exactly one terminal row, or the
-    // viewport math (1 source line = 1 visual row) breaks: wrap is forced to
-    // Never, which emits long lines in full, so the *terminal* would wrap any
-    // line wider than term_w onto extra rows — overflowing past the status bar
-    // and scrolling the top lines off the alt-screen. Truncate each visual
-    // line to term_w (ANSI-aware) to keep the invariant. Markdown rows are
-    // already wrapped to width, so this is a no-op there.
-    let body_text = String::from_utf8_lossy(&body_bytes);
-    let mut clipped = String::with_capacity(body_text.len());
-    for (i, line) in body_text.split('\n').enumerate() {
-        if i > 0 {
-            clipped.push('\n');
+    // Keep the body within body_rows visual rows AND within term_w columns so
+    // it never overflows past the status bar / scrolls the alt-screen.
+    let body_bytes: Vec<u8> = if wrap_on && !markdown_view {
+        // Wrap-on: each visual row is already <= body_width <= term_w, so just
+        // clip to body_rows rows. Append a RESET so a row cut mid-color can't
+        // bleed onto the status bar.
+        let body_text = String::from_utf8_lossy(&body_bytes);
+        let mut s = body_text
+            .split('\n')
+            .take(body_rows)
+            .collect::<Vec<_>>()
+            .join("\n");
+        s.push_str("\x1b[0m");
+        s.into_bytes()
+    } else {
+        // Wrap-off (and markdown rows): wrap=Never emits full lines, so the
+        // *terminal* would wrap any line wider than term_w onto extra rows —
+        // overflowing past the status bar. Truncate each visual line to term_w
+        // (ANSI-aware) to keep one source line on one row.
+        let body_text = String::from_utf8_lossy(&body_bytes);
+        let mut clipped = String::with_capacity(body_text.len());
+        for (i, line) in body_text.split('\n').enumerate() {
+            if i > 0 {
+                clipped.push('\n');
+            }
+            clipped.push_str(&crate::printer::truncate_to_visible_width(line, term_w));
         }
-        clipped.push_str(&crate::printer::truncate_to_visible_width(line, term_w));
-    }
-    let body_bytes = clipped.into_bytes();
+        clipped.into_bytes()
+    };
 
     // Build the whole frame in one buffer and flush once. Using execute! per
     // step (which flushes between calls) makes the terminal briefly show the

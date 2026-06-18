@@ -234,6 +234,7 @@ fn run_interactive(
         !args.no_gutter,
         autoreload,
         args.encoding,
+        args.wrap,
     )
 }
 
