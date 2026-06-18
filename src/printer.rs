@@ -473,6 +473,27 @@ fn wrap_with_continuation(
     out
 }
 
+/// Count how many visual rows `raw_line` occupies when rendered at
+/// `body_width` columns (the width left after the gutter) under `mode`.
+/// Reuses `wrap_with_continuation` on the plain, tab-expanded text so the
+/// count can never drift from the real wrapper. `Never` / zero width → 1.
+pub(crate) fn visual_row_count(
+    raw_line: &str,
+    body_width: usize,
+    tabs: usize,
+    show_all_flag: bool,
+    mode: WrapMode,
+) -> usize {
+    if body_width == 0 || matches!(mode, WrapMode::Never) {
+        return 1;
+    }
+    let displayed = expand_tabs(raw_line, tabs);
+    let displayed = if show_all_flag { show_all(&displayed) } else { displayed };
+    // No ANSI and no persistent SGR: the only newlines are the wrap breaks.
+    let wrapped = wrap_with_continuation(&displayed, body_width, "", mode, "");
+    wrapped.matches('\n').count() + 1
+}
+
 /// Truncate an already-rendered (ANSI-escaped) line to at most `max_cols`
 /// visible columns. ANSI escape sequences pass through without counting
 /// toward the column total; a wide char that would straddle the boundary is
@@ -553,6 +574,47 @@ fn show_all(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rows_single_when_line_fits() {
+        assert_eq!(visual_row_count("hello", 20, 4, false, WrapMode::Character), 1);
+    }
+
+    #[test]
+    fn rows_two_when_just_over_width() {
+        // 10 chars at width 5 → "abcde" | "fghij" = 2 rows.
+        assert_eq!(visual_row_count("abcdefghij", 5, 4, false, WrapMode::Character), 2);
+    }
+
+    #[test]
+    fn rows_three_for_long_line() {
+        // 13 chars at width 5 → 5 + 5 + 3 = 3 rows.
+        assert_eq!(visual_row_count("abcdefghijklm", 5, 4, false, WrapMode::Character), 3);
+    }
+
+    #[test]
+    fn rows_counts_wide_chars_by_display_width() {
+        // 中文中文 = 4 chars × 2 cols = 8 cols; width 5 → 中文 | 中文 = 2 rows.
+        assert_eq!(visual_row_count("中文中文", 5, 4, false, WrapMode::Character), 2);
+    }
+
+    #[test]
+    fn rows_word_mode_breaks_at_whitespace() {
+        // "aa bb cc" at width 5 → "aa bb" | "cc" = 2 rows.
+        assert_eq!(visual_row_count("aa bb cc", 5, 4, false, WrapMode::Word), 2);
+    }
+
+    #[test]
+    fn rows_never_mode_is_always_one() {
+        assert_eq!(visual_row_count("abcdefghij", 5, 4, false, WrapMode::Never), 1);
+    }
+
+    #[test]
+    fn rows_expands_tabs_before_counting() {
+        // tabs=4: "\tx" → "    x" (5 cols). width 6 → 1 row; width 4 → "    " | "x" = 2 rows.
+        assert_eq!(visual_row_count("\tx", 6, 4, false, WrapMode::Character), 1);
+        assert_eq!(visual_row_count("\tx", 4, 4, false, WrapMode::Character), 2);
+    }
 
     #[test]
     fn parses_style_full() {
