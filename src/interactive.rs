@@ -58,6 +58,69 @@ pub fn scroll_viewport(
     top.min(max_top)
 }
 
+/// Visual-row-aware version of `scroll_viewport` for when wrapping is on.
+/// `viewport_top` stays a source line, but the window holds `body_rows`
+/// *visual* rows, so we advance the top until the cursor's source line fits.
+/// `rows_of(line)` returns the visual-row count for a 1-based source line.
+/// Because the top is never advanced past the cursor, it cannot over-scroll
+/// past EOF — no separate EOF clamp is needed.
+pub fn scroll_viewport_wrapped(
+    cursor: usize,
+    current_top: usize,
+    body_rows: usize,
+    rows_of: impl Fn(usize) -> usize,
+) -> usize {
+    let body = body_rows.max(1);
+    let cursor = cursor.max(1);
+    let mut top = current_top.max(1);
+    if cursor < top {
+        top = cursor;
+    }
+    while top < cursor {
+        let rows: usize = (top..=cursor).map(|l| rows_of(l)).sum();
+        if rows <= body {
+            break;
+        }
+        top += 1;
+    }
+    top
+}
+
+/// Move the cursor by roughly `budget` visual rows (one screen, or a half for
+/// Ctrl-d/u) when wrapping is on, so paging advances about one screenful even
+/// though source lines span several rows. Walks source lines accumulating
+/// `rows_of` until the budget is met, clamped to `[1, total_lines]`.
+pub fn step_by_rows(
+    cursor: usize,
+    budget: usize,
+    total_lines: usize,
+    down: bool,
+    rows_of: impl Fn(usize) -> usize,
+) -> usize {
+    let total = total_lines.max(1);
+    let budget = budget.max(1);
+    let mut acc = 0usize;
+    let mut c = cursor.clamp(1, total);
+    loop {
+        acc += rows_of(c);
+        if acc >= budget {
+            break;
+        }
+        if down {
+            if c >= total {
+                break;
+            }
+            c += 1;
+        } else {
+            if c <= 1 {
+                break;
+            }
+            c -= 1;
+        }
+    }
+    c
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn run<'a>(
     file_label: &str,
@@ -611,6 +674,54 @@ mod tests {
     fn scroll_no_change_when_cursor_in_range() {
         // cursor=5, top=1, body=10. Visible 1..10. cursor in range, top unchanged.
         assert_eq!(scroll_viewport(5, 1, 10, 100), 1);
+    }
+
+    #[test]
+    fn wrapped_scroll_no_change_when_cursor_fits() {
+        // single-row lines, cursor 5, top 1, body 10 → stays 1.
+        assert_eq!(scroll_viewport_wrapped(5, 1, 10, |_| 1), 1);
+    }
+
+    #[test]
+    fn wrapped_scroll_pulls_top_up_to_cursor() {
+        // cursor above the window → top snaps to cursor.
+        assert_eq!(scroll_viewport_wrapped(3, 10, 10, |_| 1), 3);
+    }
+
+    #[test]
+    fn wrapped_scroll_advances_top_for_tall_lines() {
+        // every line is 4 rows; body 10 fits 2 full lines + part of a 3rd.
+        // cursor 5, top 1 → must advance top so rows(top..=5) <= 10.
+        // rows(3..=5)=12 >10, rows(4..=5)=8 <=10 → top 4.
+        assert_eq!(scroll_viewport_wrapped(5, 1, 10, |_| 4), 4);
+    }
+
+    #[test]
+    fn wrapped_scroll_clamps_when_single_line_taller_than_body() {
+        // one line is 30 rows, body 10. cursor 7 → top can only reach cursor.
+        assert_eq!(scroll_viewport_wrapped(7, 1, 10, |_| 30), 7);
+    }
+
+    #[test]
+    fn step_down_one_screen_single_row_lines() {
+        assert_eq!(step_by_rows(1, 10, 100, true, |_| 1), 10);
+    }
+
+    #[test]
+    fn step_down_stops_early_on_tall_lines() {
+        // each line 5 rows, budget 10 → 2 lines fill it; start 1 → 2.
+        assert_eq!(step_by_rows(1, 10, 100, true, |_| 5), 2);
+    }
+
+    #[test]
+    fn step_up_is_symmetric() {
+        assert_eq!(step_by_rows(50, 10, 100, false, |_| 1), 41);
+    }
+
+    #[test]
+    fn step_clamps_at_file_bounds() {
+        assert_eq!(step_by_rows(98, 10, 100, true, |_| 1), 100);
+        assert_eq!(step_by_rows(3, 10, 100, false, |_| 1), 1);
     }
 
     use std::io::Write as _;
