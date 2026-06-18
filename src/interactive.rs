@@ -618,15 +618,20 @@ fn render_frame(
     // Keep the body within body_rows visual rows AND within term_w columns so
     // it never overflows past the status bar / scrolls the alt-screen.
     let body_bytes: Vec<u8> = if wrap_on && !markdown_view {
-        // Wrap-on: each visual row is already <= body_width <= term_w, so just
-        // clip to body_rows rows. Append a RESET so a row cut mid-color can't
-        // bleed onto the status bar.
+        // Wrap-on: clip to body_rows visual rows. Each row is normally already
+        // <= body_width <= term_w, but when body_width == 0 (gutter wider than
+        // the terminal) the printer can't wrap, so also truncate each row to
+        // term_w (ANSI-aware) — otherwise the terminal would soft-wrap it and
+        // scroll the top off, the bug we're preventing. A trailing RESET stops
+        // a row cut mid-color from bleeding onto the status bar.
         let body_text = String::from_utf8_lossy(&body_bytes);
-        let mut s = body_text
-            .split('\n')
-            .take(body_rows)
-            .collect::<Vec<_>>()
-            .join("\n");
+        let mut s = String::with_capacity(body_text.len());
+        for (i, line) in body_text.split('\n').take(body_rows).enumerate() {
+            if i > 0 {
+                s.push('\n');
+            }
+            s.push_str(&crate::printer::truncate_to_visible_width(line, term_w));
+        }
         s.push_str("\x1b[0m");
         s.into_bytes()
     } else {
