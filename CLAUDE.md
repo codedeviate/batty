@@ -4,16 +4,17 @@ Project context for future Claude sessions. Keep concise; expand only when somet
 
 ## Pickup notes (battle-testing handoff)
 
-**Last touched:** 0.10.0 — colorized `--examples`, hand-written man page at `man/batty.1`, and a `CHANGELOG.md` (Keep-a-Changelog, backfilled from this file's version history). Three new CLAUDE.md conventions added to keep `man/batty.1`, `src/examples.rs`, and `CHANGELOG.md` in sync with code on every change. Published to crates.io as `batty-cat 0.10.0`, Homebrew formula bumped (+ `man1.install`), `v0.10.0` tag pushed.
+**Last touched:** 0.14.0 — feat: live `w` toggle that soft-wraps long lines in interactive/live mode (Approach A — source-line-anchored viewport, render-then-clip to `body_rows` visual rows). The viewport (`cursor`, `viewport_top`) stays source-line indexed; when wrap is on, `render_frame` renders from `viewport_top` with the printer's `Character`/`Word` wrap and clips the buffer to `body_rows` *visual* rows, so the top row stays a numbered source line and continuation rows keep a blank gutter. Initial state keys off the **raw** `--wrap` (`character`/`word` start on; `auto`/`never` start off = the 0.13.2 truncate path, untouched). New pieces: `printer::visual_row_count` (counts wrapped rows by reusing `wrap_with_continuation` so it can't drift), `interactive::scroll_viewport_wrapped` + `step_by_rows` (visual-row-aware scroll/paging), a `rows_of_line` helper, and a `wrap` status-bar tag. The wrap-on clip also runs each row through `truncate_to_visible_width(term_w)` as a belt-and-suspenders clamp for the `body_width == 0` (gutter wider than terminal) case where the printer can't wrap. Released across all four surfaces (tag `v0.14.0`, GitHub release, crates.io `batty-cat 0.14.0`, Homebrew formula bumped + `brew install` verified to build & report 0.14.0).
 
 **State at handoff:**
-- Branch `main`, all commits pushed locally (no remote).
-- 96 tests passing (`cargo test`).
-- Release binary 2.8 MB (`cargo build --release`).
-- No untracked content other than `.claude/` (user-local).
-- Plan file at `~/.claude/plans/tingly-kindling-eagle.md` reflects the most recent shipped task; safe to overwrite for the next plan.
+- Branch `main`, all commits pushed to `origin` (`git@github-codedv8:codedeviate/batty.git` — SSH alias carries the `codedeviate` identity; repo is under `~/Development/Thomas/` so gh/push want that account).
+- 150 tests passing (`cargo test`).
+- Release binary ~3 MB (`cargo build --release`); two tolerated dead-code warnings (`markdown.rs` `render_to_string` + `RenderedMarkdownWithGutter.gutter_width`).
+- No untracked content other than `.claude/` (user-local). Note: `CLAUDE.md` itself carries local uncommitted pickup-note edits.
 
 **Most likely sources of issues during battle-testing** (prioritized by recency / surface area):
+
+0. **Interactive/live soft-wrap (0.14.0) + long-line truncation (0.13.2).** The viewport math assumes 1 source line = 1 visual row in the WRAP-OFF path; `render_frame` enforces it by clipping each body line to `term_w` via `printer::truncate_to_visible_width` (`wrap=Never` does NOT truncate, so this clip is load-bearing). In the WRAP-ON path the model changes: lines wrap and the buffer is clipped to `body_rows` *visual* rows, with scroll/paging made visual-aware via `scroll_viewport_wrapped`/`step_by_rows`. Suspects if the top lines ever scroll off again: (a) wrap-off — the `term_w` clip or the value it's given; (b) wrap-on — the `body_width`/gutter geometry in `run()` (`line_no_width + 1 + 2` when `gutter_visible`) must stay identical to what `render_frame` computes, or `visual_row_count` will miscount and `render_end`/clip will drift. Edge cases to exercise: wide CJK/emoji near the right edge; cursor on a line taller than the whole screen (clamp = top=cursor); gutter toggled off mid-session (changes `body_width`); a sub-7-column terminal (`body_width == 0`, exercises the wrap-on truncate clamp); and the markdown view (rows are pre-wrapped to width, `w` is a no-op there).
 
 1. **Markdown gutter (0.8.0).** Block-walker uses pulldown_cmark's `into_offset_iter`. Edge cases I haven't exercised: deeply nested lists, tables (especially with multi-line cells), HTML blocks, footnote definitions, definition lists, setext headings (`Title\n====`), code blocks containing markdown-y syntax. Also: very long files where `line_no_width` exceeds 4 (gutter widens) and resizes mid-render. If a doc looks truncated, the depth-tracking bug could be back — see commit `cc22d6f` for the inline-tag pattern. If line numbers in the gutter don't line up with block starts, the row-counting fix from 0.8.0 may need extending — check `render_with_map`'s row_count formula and verify against `chunk_out`'s actual `\n` shape.
 
@@ -194,6 +195,9 @@ Recent history:
 - `0.9.1` — chore: publish to crates.io as `batty-cat` (binary stays `batty`). README badge header added.
 - `0.10.1` — chore: add `#![doc = include_str!("../README.md")]` at the crate root so docs.rs renders the README on the `batty-cat` landing page (binary crates otherwise show an empty module list there). No behavior change in the binary.
 - `0.10.0` — feat: colorized `--examples` flag (curated copy-pasteable scenarios, mirroring recon's pattern); short-circuits before pager / file validation; honors `NO_COLOR` + TTY detection. Plus first hand-written `man/batty.1` page covering all flags, the interactive keybindings, config schema, and environment variables. New CLAUDE.md conventions require both surfaces to stay in sync with `src/cli.rs`.
+- `0.11.0`–`0.13.1` — see `CHANGELOG.md` (this local list wasn't backfilled for those releases; the changelog is authoritative). `0.13.0` shipped `--live`; `0.13.1` was the flicker fix.
+- `0.13.2` — fix: interactive/live modes truncate long lines at the terminal edge (`printer::truncate_to_visible_width`) instead of letting the terminal soft-wrap them and scroll the top of the alt-screen off.
+- `0.14.0` — feat: live `w` toggle soft-wraps long lines in interactive/live mode (source-line-anchored viewport, render-then-clip to `body_rows` visual rows; `visual_row_count` + `scroll_viewport_wrapped` + `step_by_rows`). Initial state from raw `--wrap`; continuation rows keep a blank gutter; status bar shows a `wrap` tag.
 
 ## Conventions
 
