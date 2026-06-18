@@ -10,6 +10,24 @@ While at `0.x`:
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-06-18
+
+### Added
+
+- Interactive (`-i`) and live (`--live`) modes can now soft-wrap long lines.
+  Press `w` to toggle wrapping on/off live; overflow continues on the next
+  visual row with a blank line-number gutter, the top row stays a numbered
+  source line, and nothing scrolls off-screen. The initial state follows the
+  raw `--wrap` value (`character`/`word` start wrapped; `auto`/`never` — the
+  default — start in the existing truncate-at-edge mode). `--wrap=word` selects
+  word-boundary breaks; otherwise `w` uses character breaks. The status bar
+  shows a `wrap` tag while on.
+
+### Changed
+
+- `--wrap` is no longer forced to `never` in interactive/live mode; the raw
+  value seeds the initial wrap state.
+
 ## [0.13.2] — 2026-06-17
 
 ### Fixed
@@ -325,7 +343,8 @@ While at `0.x`:
 - Initial release: full `bat`-parity (highlighting, git diff, pager,
   config, themes), bundled Rhai grammar, 36 tests, 2.5 MB binary.
 
-[Unreleased]: https://github.com/codedeviate/batty/compare/v0.13.2...HEAD
+[Unreleased]: https://github.com/codedeviate/batty/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/codedeviate/batty/compare/v0.13.2...v0.14.0
 [0.13.2]: https://github.com/codedeviate/batty/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/codedeviate/batty/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/codedeviate/batty/compare/v0.12.0...v0.13.0

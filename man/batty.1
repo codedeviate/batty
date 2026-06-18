@@ -1,7 +1,7 @@
 .\" Manpage for batty.
 .\" Keep in sync with src/cli.rs, README.md, and CLAUDE.md (see "Keep the
 .\" man page in sync" convention).
-.TH BATTY 1 "2026-06-17" "batty 0.13.2" "User Commands"
+.TH BATTY 1 "2026-06-18" "batty 0.14.0" "User Commands"
 .SH NAME
 batty \- a cat clone with syntax highlighting, git diff markers, and a TUI
 .SH SYNOPSIS
@@ -219,9 +219,10 @@ always wraps at the terminal-width boundary.
 breaks at whitespace boundaries instead, best for prose; words longer than the wrap width fall back to
 .B character
 -style breaks so output never overflows.
-Forced to
-.B never
-in interactive mode.
+In interactive and live modes the raw value seeds the initial wrap state,
+and the
+.B w
+key toggles wrapping live.
 .TP
 .BR \-h ", " \-\-help
 Print short help.
@@ -256,6 +257,11 @@ is set.
 .TP
 .B n
 Toggle the gutter.
+.TP
+.B w
+Toggle soft-wrap. Overflow continues on the next visual row with a blank
+line-number gutter; the top row stays a numbered source line. The initial
+state follows the raw \fB--wrap\fR value.
 .TP
 .B + / \-
 Adjust

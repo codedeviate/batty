@@ -127,6 +127,10 @@ fn render<W: Write>(w: &mut W, c: bool) -> io::Result<()> {
         "batty --live ~/.config/batty/config.toml",
     ])?;
     note(w, c, "Single file only. Status bar shows [live · reloaded] after each reload. Use --no-live to override `live = true` in config.")?;
+    example(w, c, "Live-tail a log with soft-wrap on from the start", &[
+        "batty --live --wrap=character app.log",
+    ])?;
+    note(w, c, "Press w to toggle wrapping on/off at any time. Status bar shows `wrap` while on.")?;
 
     section(w, c, "ENCODING / WRAPPING")?;
 
