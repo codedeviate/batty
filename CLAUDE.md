@@ -248,6 +248,13 @@ Recent history:
   - Move items between sections as appropriate (e.g., a Rhai grammar gap that gets fixed leaves "Rhai grammar gaps"; a deferred CLI flag that ships leaves "Rendering" or wherever it lived).
   - Update the file in the same commit as the change that triggers the add or removal — same rule as `README.md`.
 
+- **Drain `WISHLIST.md` into `OUT-OF-SCOPE.md` (idle task).** `WISHLIST.md` is the user's freeform inbox: a place to jot raw ideas for `OUT-OF-SCOPE.md` without having to format them or touch that file directly. **When there's nothing else to do (idle time, or whenever you happen to be in this repo), check `WISHLIST.md`.** If it has any content, drain it:
+  - For each idea, pick the right `OUT-OF-SCOPE.md` **bucket** — `Waiting` (can be done; nobody's asked), `Deferred` (possible but actively put off), `Not yet supported` (blocked upstream), or `Out of scope` (can't / won't) — and the right **category subsection** within it (Theming, Interactive mode, Rendering, Live mode, Rhai grammar gaps, Platform, …). Create a new subsection only if none fits.
+  - **Rewrite** the raw note into the house style: a bullet with a **bold lead-in phrase** then a sentence or two of explanation (match the surrounding entries). Don't paste the user's shorthand verbatim.
+  - **Before adding, sanity-check it isn't already implemented** (grep the code / `--help` / `CHANGELOG.md`). If an idea is already shipped, don't add it — note that back to the user instead.
+  - After moving every item, leave `WISHLIST.md` **empty** (that's the steady state — an empty file means the inbox is drained). Commit `WISHLIST.md` + `OUT-OF-SCOPE.md` together with a `docs:` message.
+  - If an idea is too ambiguous to place confidently, ask the user rather than guessing the bucket.
+
 ## Config file
 
 `~/.config/batty/config.toml` (XDG-style, even on macOS — bat does the same). Top-level keys map to CLI long flag names with hyphens preserved:
