@@ -187,6 +187,7 @@ fn run() -> Result<()> {
             cursor,
             line_numbers: args.line_numbers,
             markdown: resolve_markdown(&args, path),
+            pretty: resolve_pretty(&args, path),
         };
         print(&mut stdout, input, &contents, &mut hl, &cfg)?;
         stdout.flush()?;
@@ -255,6 +256,21 @@ fn resolve_markdown(args: &Cli, path: Option<&std::path::Path>) -> bool {
         return path.map(markdown::is_markdown_path).unwrap_or(false);
     }
     false
+}
+
+/// Resolve whether to prettify JSONL given the precedence:
+///   1. `--no-pretty` → never
+///   2. `--pretty` (or `pretty = true`) → always
+///   3. path is .jsonl / .ndjson → yes
+///   4. otherwise → no
+fn resolve_pretty(args: &Cli, path: Option<&std::path::Path>) -> bool {
+    if args.no_pretty {
+        return false;
+    }
+    if args.pretty {
+        return true;
+    }
+    path.map(json::is_jsonl_path).unwrap_or(false)
 }
 
 pub fn term_width() -> usize {

@@ -73,6 +73,9 @@ pub struct PrinterConfig<'a> {
     /// When true, body decorations (numbers / changes / cursor / line range)
     /// are skipped — markdown rendering produces its own block structure.
     pub markdown: bool,
+    /// Render the input as prettified JSON Lines instead of raw source.
+    /// Mutually exclusive with `markdown`; body decorations are skipped.
+    pub pretty: bool,
 }
 
 /// Compute the visible label for a line number given the configured style.
@@ -118,6 +121,8 @@ pub fn print<W: Write>(
         }
         let lang_label = if cfg.markdown {
             "Markdown (rendered)"
+        } else if cfg.pretty {
+            "JSON (prettified)"
         } else {
             cfg.language_name
         };
@@ -153,6 +158,27 @@ pub fn print<W: Write>(
         );
         out.write_all(r.text.as_bytes())?;
         // Ensure the body ends with a newline before any trailing grid_bot.
+        if !r.text.ends_with('\n') {
+            writeln!(out)?;
+        }
+        if cfg.style.grid {
+            write_grid_bot(out, cfg, line_no_width)?;
+        }
+        return Ok(());
+    }
+
+    // Prettified JSONL short-circuit: expand + highlight each line, with the
+    // same per-row source-line gutter the markdown view uses.
+    if cfg.pretty {
+        let r = crate::json::render_with_gutter(
+            contents,
+            line_no_width,
+            cfg.style.numbers,
+            cfg.style.grid,
+            cfg.use_color,
+            highlighter,
+        )?;
+        out.write_all(r.text.as_bytes())?;
         if !r.text.ends_with('\n') {
             writeln!(out)?;
         }
@@ -915,6 +941,7 @@ mod tests {
             cursor: Some(1),
             line_numbers: LineNumberStyle::Absolute,
             markdown: false,
+            pretty: false,
         };
         let changes = std::collections::HashMap::new();
         let (s, w) = build_first_gutter(&cfg, 4, 1, &changes);

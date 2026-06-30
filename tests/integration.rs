@@ -1241,3 +1241,49 @@ fn interactive_soft_wrap_continues_long_line() {
         );
     }
 }
+
+#[test]
+fn jsonl_prettifies_by_default() {
+    let dir = std::env::temp_dir();
+    let f = dir.join("batty_it_default.jsonl");
+    std::fs::write(&f, "{\"b\":1,\"a\":2}\n").unwrap();
+    let out = batty()
+        .args(["--color=never", "--style=plain"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("\"b\": 1"), "expected prettified output, got: {s}");
+    assert!(s.matches('\n').count() >= 3, "expected expansion, got: {s}");
+    let _ = std::fs::remove_file(&f);
+}
+
+#[test]
+fn jsonl_no_pretty_shows_raw() {
+    let dir = std::env::temp_dir();
+    let f = dir.join("batty_it_raw.jsonl");
+    std::fs::write(&f, "{\"b\":1,\"a\":2}\n").unwrap();
+    let out = batty()
+        .args(["--color=never", "--style=plain", "--no-pretty"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("{\"b\":1,\"a\":2}"), "expected raw line, got: {s}");
+    let _ = std::fs::remove_file(&f);
+}
+
+#[test]
+fn pretty_flag_forces_on_non_jsonl_extension() {
+    let dir = std::env::temp_dir();
+    let f = dir.join("batty_it_force.txt");
+    std::fs::write(&f, "{\"x\":1}\n").unwrap();
+    let out = batty()
+        .args(["--color=never", "--style=plain", "--pretty"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("\"x\": 1"), "expected forced pretty, got: {s}");
+    let _ = std::fs::remove_file(&f);
+}

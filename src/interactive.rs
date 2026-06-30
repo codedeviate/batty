@@ -569,6 +569,7 @@ fn render_frame(
             cursor: if gutter_visible { Some(cursor) } else { None },
             line_numbers,
             markdown: false,
+            pretty: false,
         };
         let mut buf: Vec<u8> = Vec::with_capacity(term_w * term_h);
         let stub_input = crate::input::InputKind::Stdin;

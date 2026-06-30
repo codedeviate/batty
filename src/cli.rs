@@ -115,6 +115,11 @@ pub struct Cli {
     #[arg(long, overrides_with = "markdown")]
     pub no_markdown: bool,
 
+    /// Disable the prettified JSONL view. Overrides `pretty = true` in the
+    /// config and the automatic prettify of .jsonl / .ndjson files.
+    #[arg(long, overrides_with = "pretty")]
+    pub no_pretty: bool,
+
     /// Show line numbers (equivalent to --style=numbers)
     #[arg(short = 'n', long, overrides_with = "number")]
     pub number: bool,
@@ -127,6 +132,12 @@ pub struct Cli {
     /// Plain output (no decorations, equivalent to --style=plain)
     #[arg(short = 'p', long, overrides_with = "plain")]
     pub plain: bool,
+
+    /// Pretty-print JSON Lines: expand each line to multi-line, indented,
+    /// highlighted JSON. Auto-on for .jsonl / .ndjson; use --no-pretty to
+    /// opt out, or --pretty to force it on any file.
+    #[arg(long, overrides_with = "no_pretty")]
+    pub pretty: bool,
 
     /// Show non-printable characters
     #[arg(short = 'A', long, overrides_with = "show_all")]
