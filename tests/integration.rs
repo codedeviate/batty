@@ -1287,3 +1287,87 @@ fn pretty_flag_forces_on_non_jsonl_extension() {
     assert!(s.contains("\"x\": 1"), "expected forced pretty, got: {s}");
     let _ = std::fs::remove_file(&f);
 }
+
+/// Interactive `p` toggle: opening a `.jsonl` file starts in the prettified
+/// JSON view (status bar shows `[json]`), and `q` exits cleanly. Mirrors the
+/// soft-wrap tmux harness above; skips (passes) when tmux isn't installed.
+/// (No automated frame assertion exists beyond this tmux capture — the deeper
+/// rendering behavior is covered by the `json` module's unit tests.)
+#[test]
+fn interactive_pretty_toggle_shows_json_tag() {
+    let tmux_ok = Command::new("tmux")
+        .arg("-V")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if !tmux_ok {
+        eprintln!("skipping interactive_pretty_toggle_shows_json_tag: tmux not available");
+        return;
+    }
+
+    let f = std::env::temp_dir().join("battypretty_t.jsonl");
+    std::fs::write(&f, "{\"b\":1,\"a\":[1,2]}\n{\"x\":true}\nnotjson\n").unwrap();
+
+    let session = format!("battypretty_{}", std::process::id());
+    let tmux = |args: &[&str]| Command::new("tmux").args(args).output().unwrap();
+
+    // Wide pane: the file's full temp-dir path plus the status bar's mode
+    // tags can otherwise overflow a narrow status bar and truncate the
+    // [json] tag off the right edge (the same caveat documented on the
+    // wrap-toggle test above, which doesn't assert on the status bar).
+    let _ = tmux(&["kill-session", "-t", &session]);
+    assert!(
+        tmux(&["new-session", "-d", "-s", &session, "-x", "200", "-y", "20"])
+            .status
+            .success(),
+        "failed to create tmux session"
+    );
+    let cmd = format!(
+        "env BATTY_CONFIG_PATH=/dev/null '{}' -i '{}'",
+        env!("CARGO_BIN_EXE_batty"),
+        f.display()
+    );
+    tmux(&["send-keys", "-t", &session, &cmd, "Enter"]);
+
+    // A .jsonl file auto-starts in pretty view; poll for the [json] tag.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut screen = String::new();
+    while std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let out = tmux(&["capture-pane", "-t", &session, "-p"]);
+        screen = String::from_utf8_lossy(&out.stdout).to_string();
+        if screen.contains("[json]") {
+            break;
+        }
+    }
+    assert!(
+        screen.contains("[json]"),
+        "expected [json] tag on startup for a .jsonl file:\n{}",
+        screen
+    );
+
+    // q exits cleanly — batty's alt-screen content (the [json] frame) should
+    // disappear, leaving the shell prompt behind. (The tmux *session* itself
+    // stays alive since it hosts a shell, not batty directly — has-session
+    // isn't a useful signal here.)
+    tmux(&["send-keys", "-t", &session, "q"]);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut after_quit = String::new();
+    while std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let out = tmux(&["capture-pane", "-t", &session, "-p"]);
+        after_quit = String::from_utf8_lossy(&out.stdout).to_string();
+        if !after_quit.contains("[json]") {
+            break;
+        }
+    }
+
+    let _ = tmux(&["kill-session", "-t", &session]);
+    let _ = std::fs::remove_file(&f);
+
+    assert!(
+        !after_quit.contains("[json]"),
+        "expected the alt-screen [json] frame to clear after q, got:\n{}",
+        after_quit
+    );
+}

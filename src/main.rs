@@ -220,6 +220,12 @@ fn run_interactive(
     let initial_markdown = resolve_markdown(args, Some(&path));
     let can_toggle = is_md || initial_markdown;
 
+    // The `p` toggle is enabled when the file looks like JSONL by extension,
+    // OR the user explicitly forced --pretty (so they can flip back to raw).
+    let is_jsonl = json::is_jsonl_path(&path);
+    let initial_pretty = resolve_pretty(args, Some(&path));
+    let can_toggle_pretty = is_jsonl || initial_pretty;
+
     let autoreload = if args.live { Some(path.as_path()) } else { None };
     interactive::run(
         &input.display_name(),
@@ -233,6 +239,8 @@ fn run_interactive(
         args.top_pad,
         initial_markdown,
         can_toggle,
+        initial_pretty,
+        can_toggle_pretty,
         !args.no_gutter,
         autoreload,
         args.encoding,
