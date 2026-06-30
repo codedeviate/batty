@@ -34,12 +34,17 @@ entry rather than leaving a crossed-out line here.
 
 - **Configurable markdown skin.** termimad's `MadSkin::default()` is used; no `--markdown-skin` flag.
 
+### Rendering
+
+- **Configurable JSON indent width.** The prettified JSONL view fixes indentation at 2 spaces (serde_json's default `to_string_pretty`); it isn't wired to `--tabs` or any new flag.
+
 ---
 
 ## Deferred
 
 ### Rendering
 
+- **Whole-file pretty-print of a single multi-line `.json` document.** The pretty view is line-oriented — it expects one JSON value per source line (JSONL/NDJSON) and reformats each independently. Reformatting a single JSON value that already spans many lines is a different model (parse-the-whole-file-as-one-value, then re-emit) and isn't implemented.
 - **`--diff-context` filters output.** Today it's only passed to `git2::DiffOptions`; the printer still emits all lines. Real bat shows only changed regions ± context lines when `--diff` is on.
 - **Sub-paragraph row precision in markdown.** The source ↔ rendered map is block-granular: a wrapped 6-row paragraph shows the source-line on row 1 with continuations blank in the gutter. Per-row precision would require replacing termimad with a custom renderer (we walk pulldown_cmark events but defer rendering to termimad for layout).
 - **8-bit color downsampling.** Output uses truecolor (`as_24_bit_terminal_escaped`); 256-color terminals get whatever the terminal emulator does at render time. Real bat uses `ansi_colours` to emit nearest-color escapes when truecolor isn't supported.

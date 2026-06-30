@@ -8,6 +8,7 @@ mod git;
 mod highlight;
 mod input;
 mod interactive;
+mod json;
 mod markdown;
 mod pager;
 mod printer;
@@ -186,6 +187,7 @@ fn run() -> Result<()> {
             cursor,
             line_numbers: args.line_numbers,
             markdown: resolve_markdown(&args, path),
+            pretty: resolve_pretty(&args, path),
         };
         print(&mut stdout, input, &contents, &mut hl, &cfg)?;
         stdout.flush()?;
@@ -218,6 +220,12 @@ fn run_interactive(
     let initial_markdown = resolve_markdown(args, Some(&path));
     let can_toggle = is_md || initial_markdown;
 
+    // The `p` toggle is enabled when the file looks like JSONL by extension,
+    // OR the user explicitly forced --pretty (so they can flip back to raw).
+    let is_jsonl = json::is_jsonl_path(&path);
+    let initial_pretty = resolve_pretty(args, Some(&path));
+    let can_toggle_pretty = is_jsonl || initial_pretty;
+
     let autoreload = if args.live { Some(path.as_path()) } else { None };
     interactive::run(
         &input.display_name(),
@@ -231,6 +239,8 @@ fn run_interactive(
         args.top_pad,
         initial_markdown,
         can_toggle,
+        initial_pretty,
+        can_toggle_pretty,
         !args.no_gutter,
         autoreload,
         args.encoding,
@@ -254,6 +264,21 @@ fn resolve_markdown(args: &Cli, path: Option<&std::path::Path>) -> bool {
         return path.map(markdown::is_markdown_path).unwrap_or(false);
     }
     false
+}
+
+/// Resolve whether to prettify JSONL given the precedence:
+///   1. `--no-pretty` → never
+///   2. `--pretty` (or `pretty = true`) → always
+///   3. path is .jsonl / .ndjson → yes
+///   4. otherwise → no
+fn resolve_pretty(args: &Cli, path: Option<&std::path::Path>) -> bool {
+    if args.no_pretty {
+        return false;
+    }
+    if args.pretty {
+        return true;
+    }
+    path.map(json::is_jsonl_path).unwrap_or(false)
 }
 
 pub fn term_width() -> usize {

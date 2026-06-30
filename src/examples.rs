@@ -97,6 +97,19 @@ fn render<W: Write>(w: &mut W, c: bool) -> io::Result<()> {
         "batty --no-markdown README.md",
     ])?;
 
+    section(w, c, "JSONL / NDJSON")?;
+
+    example(w, c, "Auto-prettified, highlighted JSON Lines (the default)", &[
+        "batty data.jsonl",
+    ])?;
+    example(w, c, "Opt out: raw one-object-per-line output", &[
+        "batty --no-pretty data.jsonl",
+    ])?;
+    example(w, c, "Force pretty-printing on a non-.jsonl file", &[
+        "batty --pretty server.log",
+    ])?;
+    note(w, c, "Auto-on for .jsonl / .ndjson; malformed/blank lines pass through dimmed. In -i/--live, p toggles raw <-> pretty.")?;
+
     section(w, c, "GIT DIFF")?;
 
     example(w, c, "Show diff markers vs HEAD in the gutter", &[
@@ -118,7 +131,7 @@ fn render<W: Write>(w: &mut W, c: bool) -> io::Result<()> {
     example(w, c, "Launch the interactive viewer", &[
         "batty -i src/main.rs",
     ])?;
-    note(w, c, "Keys: j/k scroll, g/G top/bottom, Ctrl-d/u half-page, q to quit, m to toggle markdown, n to toggle gutter, +/- adjust top-pad.")?;
+    note(w, c, "Keys: j/k scroll, g/G top/bottom, Ctrl-d/u half-page, q to quit, m to toggle markdown, p to toggle prettified JSONL, n to toggle gutter, +/- adjust top-pad.")?;
     example(w, c, "Reserve top rows (useful for Warp's overlay)", &[
         "batty -i --top-pad=2 src/main.rs",
     ])?;

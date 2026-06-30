@@ -37,6 +37,13 @@ pub fn detect_syntax<'a>(
             if let Some(s) = set.find_syntax_by_extension(ext) {
                 return s;
             }
+            // JSONL / NDJSON have no dedicated grammar; every line is itself
+            // valid JSON, so highlight them with the JSON grammar.
+            if matches!(ext.to_ascii_lowercase().as_str(), "jsonl" | "ndjson") {
+                if let Some(s) = set.find_syntax_by_token("json") {
+                    return s;
+                }
+            }
         }
         if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
             if let Some(s) = set.find_syntax_by_token(name) {
@@ -82,5 +89,15 @@ mod tests {
         let set = build_syntax_set().unwrap();
         let s = detect_syntax(&set, Some(Path::new("foo.rs")), Some("python"), None);
         assert_eq!(s.name, "Python");
+    }
+
+    #[test]
+    fn detects_jsonl_as_json() {
+        let set = build_syntax_set().unwrap();
+        let json = set.find_syntax_by_token("json").unwrap();
+        for name in ["data.jsonl", "logs.ndjson", "UPPER.JSONL"] {
+            let s = detect_syntax(&set, Some(std::path::Path::new(name)), None, None);
+            assert_eq!(s.name, json.name, "{name} should resolve to JSON, got {}", s.name);
+        }
     }
 }

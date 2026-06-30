@@ -10,6 +10,22 @@ While at `0.x`:
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-07-01
+
+### Added
+
+- `.jsonl` / `.ndjson` files are highlighted with the JSON grammar.
+- Prettified JSONL view: each line is expanded to multi-line, indented,
+  highlighted JSON. Auto-on for `.jsonl` / `.ndjson`; `--pretty` forces it on
+  any file, `--no-pretty` (config `pretty` / `no-pretty`) opts out. Interactive
+  `p` key toggles raw↔pretty with scroll position preserved; malformed/blank
+  lines pass through dimmed; the gutter shows source-line numbers.
+
+### Changed
+
+- `batty file.jsonl` now prettifies by default instead of printing raw lines
+  (use `--no-pretty` for the old behavior).
+
 ## [0.14.0] — 2026-06-18
 
 ### Added
@@ -343,7 +359,8 @@ While at `0.x`:
 - Initial release: full `bat`-parity (highlighting, git diff, pager,
   config, themes), bundled Rhai grammar, 36 tests, 2.5 MB binary.
 
-[Unreleased]: https://github.com/codedeviate/batty/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/codedeviate/batty/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/codedeviate/batty/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/codedeviate/batty/compare/v0.13.2...v0.14.0
 [0.13.2]: https://github.com/codedeviate/batty/compare/v0.13.1...v0.13.2
 [0.13.1]: https://github.com/codedeviate/batty/compare/v0.13.0...v0.13.1

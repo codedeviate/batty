@@ -149,6 +149,8 @@ pub fn run<'a>(
     top_pad: u16,
     initial_markdown: bool,
     can_toggle_markdown: bool,
+    initial_pretty: bool,
+    can_toggle_pretty: bool,
     initial_gutter_visible: bool,
     autoreload: Option<&Path>,
     encoding: Encoding,
@@ -159,10 +161,14 @@ pub fn run<'a>(
     let mut cursor: usize = 1;
     let mut viewport_top: usize = 1;
     let mut markdown_view: bool = initial_markdown;
-    // Independent scroll position for the rendered markdown view: counted in
-    // *rendered* rows, not source lines, since termimad transforms structure.
-    // Clamped to a valid range inside render_frame each frame.
-    let mut markdown_scroll: usize = 0;
+    // Pretty (JSONL) view: a transformed view parallel to markdown. The two are
+    // mutually exclusive; if both were forced, markdown wins at startup.
+    let mut pretty_view: bool = initial_pretty && !initial_markdown;
+    // Independent scroll position for the current transformed view (markdown
+    // or pretty): counted in *rendered* rows, not source lines, since the
+    // transform reshapes structure. Clamped to a valid range inside
+    // render_frame each frame.
+    let mut view_scroll: usize = 0;
     // top_pad is live-adjustable via `+` / `-`. Some terminals (notably Warp)
     // overlay UI on the alt-screen's top rows, and the right padding can vary
     // tab-to-tab and after pane resizes — so let users tune it without exiting.
@@ -180,11 +186,11 @@ pub fn run<'a>(
     } else {
         WrapMode::Character
     };
-    // Cache of (rendered_row, source_line) tuples for the current markdown
-    // render. Built when entering markdown view so m-toggles can preserve
-    // scroll position between raw and rendered views. Cleared on resize so
-    // we re-render at the new width.
-    let mut markdown_map: Option<Vec<(usize, usize)>> = None;
+    // Cache of (rendered_row, source_line) tuples for the current transformed
+    // view (markdown or pretty). Built when entering that view so toggles can
+    // preserve scroll position between raw and rendered views. Cleared on
+    // resize so we re-render at the new width.
+    let mut view_map: Option<Vec<(usize, usize)>> = None;
     let mut last_term_w: usize = 0;
 
     let mut watch = autoreload.map(WatchState::seed).transpose()?;
@@ -202,10 +208,11 @@ pub fn run<'a>(
         let (term_w, term_h) = size().unwrap_or((80, 24));
         let term_w = term_w as usize;
         let term_h = term_h as usize;
-        // If the terminal width changed, invalidate the cached markdown map
-        // so it re-builds at the new width on next entry / use.
+        // If the terminal width changed, invalidate the cached view map
+        // (markdown or pretty) so it re-builds at the new width on next
+        // entry / use.
         if term_w != last_term_w {
-            markdown_map = None;
+            view_map = None;
             last_term_w = term_w;
             needs_render = true;
         }
@@ -220,7 +227,7 @@ pub fn run<'a>(
         let line_no_width = total_lines.to_string().len().max(4);
         let gutter_w = if gutter_visible { line_no_width + 1 + 2 } else { 0 };
         let body_width = term_w.saturating_sub(gutter_w);
-        viewport_top = if wrap_on && !markdown_view {
+        viewport_top = if wrap_on && !markdown_view && !pretty_view {
             scroll_viewport_wrapped(cursor, viewport_top, body_rows, |l| {
                 rows_of_line(&contents, l, body_width, tabs, show_all, wrap_mode)
             })
@@ -247,9 +254,10 @@ pub fn run<'a>(
                 total_lines,
                 top_pad,
                 markdown_view,
-                &mut markdown_scroll,
+                pretty_view,
+                &mut view_scroll,
                 gutter_visible,
-                &mut markdown_map,
+                &mut view_map,
                 autoreload.is_some(),
                 reload_flash,
                 wrap_on,
@@ -272,36 +280,36 @@ pub fn run<'a>(
                     }
                     match code {
                         KeyCode::Char('j') | KeyCode::Down => {
-                            if markdown_view {
-                                markdown_scroll = markdown_scroll.saturating_add(1);
+                            if markdown_view || pretty_view {
+                                view_scroll = view_scroll.saturating_add(1);
                             } else if cursor < total_lines {
                                 cursor += 1;
                             }
                         }
                         KeyCode::Char('k') | KeyCode::Up => {
-                            if markdown_view {
-                                markdown_scroll = markdown_scroll.saturating_sub(1);
+                            if markdown_view || pretty_view {
+                                view_scroll = view_scroll.saturating_sub(1);
                             } else if cursor > 1 {
                                 cursor -= 1;
                             }
                         }
                         KeyCode::Char('g') | KeyCode::Home => {
-                            if markdown_view {
-                                markdown_scroll = 0;
+                            if markdown_view || pretty_view {
+                                view_scroll = 0;
                             } else {
                                 cursor = 1;
                             }
                         }
                         KeyCode::Char('G') | KeyCode::End => {
-                            if markdown_view {
-                                markdown_scroll = usize::MAX; // clamped in render_frame
+                            if markdown_view || pretty_view {
+                                view_scroll = usize::MAX; // clamped in render_frame
                             } else {
                                 cursor = total_lines;
                             }
                         }
                         KeyCode::PageDown => {
-                            if markdown_view {
-                                markdown_scroll = markdown_scroll.saturating_add(body_rows);
+                            if markdown_view || pretty_view {
+                                view_scroll = view_scroll.saturating_add(body_rows);
                             } else if wrap_on {
                                 cursor = step_by_rows(cursor, body_rows, total_lines, true, |l| {
                                     rows_of_line(&contents, l, body_width, tabs, show_all, wrap_mode)
@@ -311,8 +319,8 @@ pub fn run<'a>(
                             }
                         }
                         KeyCode::PageUp => {
-                            if markdown_view {
-                                markdown_scroll = markdown_scroll.saturating_sub(body_rows);
+                            if markdown_view || pretty_view {
+                                view_scroll = view_scroll.saturating_sub(body_rows);
                             } else if wrap_on {
                                 cursor = step_by_rows(cursor, body_rows, total_lines, false, |l| {
                                     rows_of_line(&contents, l, body_width, tabs, show_all, wrap_mode)
@@ -322,8 +330,8 @@ pub fn run<'a>(
                             }
                         }
                         KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => {
-                            if markdown_view {
-                                markdown_scroll = markdown_scroll.saturating_add(body_rows / 2);
+                            if markdown_view || pretty_view {
+                                view_scroll = view_scroll.saturating_add(body_rows / 2);
                             } else if wrap_on {
                                 cursor = step_by_rows(cursor, body_rows / 2, total_lines, true, |l| {
                                     rows_of_line(&contents, l, body_width, tabs, show_all, wrap_mode)
@@ -333,8 +341,8 @@ pub fn run<'a>(
                             }
                         }
                         KeyCode::Char('u') if modifiers.contains(KeyModifiers::CONTROL) => {
-                            if markdown_view {
-                                markdown_scroll = markdown_scroll.saturating_sub(body_rows / 2);
+                            if markdown_view || pretty_view {
+                                view_scroll = view_scroll.saturating_sub(body_rows / 2);
                             } else if wrap_on {
                                 cursor = step_by_rows(cursor, body_rows / 2, total_lines, false, |l| {
                                     rows_of_line(&contents, l, body_width, tabs, show_all, wrap_mode)
@@ -351,10 +359,10 @@ pub fn run<'a>(
                                 if markdown_view {
                                     // Going markdown → raw: pull the source line from
                                     // the current rendered scroll position.
-                                    if let Some(map) = markdown_map.as_ref() {
+                                    if let Some(map) = view_map.as_ref() {
                                         let src = crate::markdown::source_line_for_rendered(
                                             map,
-                                            markdown_scroll,
+                                            view_scroll,
                                         );
                                         cursor = src.clamp(1, total_lines);
                                     }
@@ -363,19 +371,21 @@ pub fn run<'a>(
                                     // Going raw → markdown: build (or reuse) the map,
                                     // scroll to the rendered row of the block at the
                                     // current source-line cursor.
-                                    if markdown_map.is_none() {
+                                    pretty_view = false;
+                                    view_map = None; // ensure a markdown map, not a stale JSON map
+                                    if view_map.is_none() {
                                         let r = crate::markdown::render_with_map(
                                             &contents,
                                             last_term_w.max(20),
                                         );
-                                        markdown_map = Some(r.map);
+                                        view_map = Some(r.map);
                                     }
-                                    if let Some(map) = markdown_map.as_ref() {
-                                        markdown_scroll = crate::markdown::rendered_row_for_source(
+                                    if let Some(map) = view_map.as_ref() {
+                                        view_scroll = crate::markdown::rendered_row_for_source(
                                             map, cursor,
                                         );
                                     } else {
-                                        markdown_scroll = 0;
+                                        view_scroll = 0;
                                     }
                                     markdown_view = true;
                                 }
@@ -389,6 +399,35 @@ pub fn run<'a>(
                             // Toggle soft-wrap (raw view only; markdown already wraps).
                             if !markdown_view {
                                 wrap_on = !wrap_on;
+                            }
+                        }
+                        KeyCode::Char('p') => {
+                            // Toggle the prettified JSONL view. Mirrors `m`:
+                            // preserve scroll position via the source map, and
+                            // exit markdown view if it was somehow active.
+                            if can_toggle_pretty || pretty_view {
+                                if pretty_view {
+                                    if let Some(map) = view_map.as_ref() {
+                                        let src = crate::markdown::source_line_for_rendered(
+                                            map, view_scroll,
+                                        );
+                                        cursor = src.clamp(1, total_lines);
+                                    }
+                                    pretty_view = false;
+                                } else {
+                                    markdown_view = false;
+                                    // Build a JSON map now so we can scroll to the
+                                    // object at the current cursor line.
+                                    let mut hl = Highlighter::new(syntax, theme, syntax_set);
+                                    let r = crate::json::render_with_map(
+                                        &contents, &mut hl, true,
+                                    )?;
+                                    view_scroll = crate::markdown::rendered_row_for_source(
+                                        &r.map, cursor,
+                                    );
+                                    view_map = Some(r.map);
+                                    pretty_view = true;
+                                }
                             }
                         }
                         // Live top-pad adjustment for terminals that overlay UI on
@@ -421,7 +460,7 @@ pub fn run<'a>(
                         total_lines = contents.lines().count().max(1);
                         cursor = cursor.min(total_lines).max(1);
                         viewport_top = viewport_top.min(total_lines).max(1);
-                        markdown_map = None;
+                        view_map = None;
                         reload_flash = Some(std::time::Instant::now());
                         needs_render = true;
                     }
@@ -461,9 +500,10 @@ fn render_frame(
     total_lines: usize,
     top_pad: u16,
     markdown_view: bool,
-    markdown_scroll: &mut usize,
+    pretty_view: bool,
+    view_scroll: &mut usize,
     gutter_visible: bool,
-    markdown_map: &mut Option<Vec<(usize, usize)>>,
+    view_map: &mut Option<Vec<(usize, usize)>>,
     live_mode: bool,
     reload_flash: Option<std::time::Instant>,
     wrap_on: bool,
@@ -474,9 +514,9 @@ fn render_frame(
         .max(1);
 
     // Build the body buffer + position label.
-    // - Markdown view renders the whole document via termimad (with source-line
-    //   map), then slices a visible window of *rendered rows* using
-    //   markdown_scroll.
+    // - The current transformed view (markdown or pretty) renders the whole
+    //   document (with a source-line map), then slices a visible window of
+    //   *rendered rows* using view_scroll.
     // - Raw view goes through the standard printer with line_range applied.
     let (body_bytes, position_label): (Vec<u8>, String) = if markdown_view {
         let line_no_width = total_lines.to_string().len().max(4);
@@ -489,23 +529,47 @@ fn render_frame(
             true,           // interactive is always color
         );
         // Cache the map for m-toggle scroll preservation.
-        *markdown_map = Some(rendered.map.clone());
+        *view_map = Some(rendered.map.clone());
         let rows: Vec<&str> = rendered.text.split('\n').collect();
         let total = rows.len().max(1);
         let max_scroll = total.saturating_sub(body_rows);
-        if *markdown_scroll > max_scroll {
-            *markdown_scroll = max_scroll;
+        if *view_scroll > max_scroll {
+            *view_scroll = max_scroll;
         }
-        let end = (*markdown_scroll + body_rows).min(total);
-        let visible = &rows[*markdown_scroll..end];
+        let end = (*view_scroll + body_rows).min(total);
+        let visible = &rows[*view_scroll..end];
         let body = visible.join("\n");
-        let src_line = crate::markdown::source_line_for_rendered(&rendered.map, *markdown_scroll);
+        let src_line = crate::markdown::source_line_for_rendered(&rendered.map, *view_scroll);
         let label = format!(
             "rendered {}/{} ↔ src {}",
-            *markdown_scroll + 1,
+            *view_scroll + 1,
             total,
             src_line
         );
+        (body.into_bytes(), label)
+    } else if pretty_view {
+        let line_no_width = total_lines.to_string().len().max(4);
+        let mut highlighter = Highlighter::new(syntax, theme, syntax_set);
+        let rendered = crate::json::render_with_gutter(
+            contents,
+            line_no_width,
+            gutter_visible, // numbers track the n-key toggle
+            false,          // no grid in interactive mode
+            true,           // interactive is always color
+            &mut highlighter,
+        )?;
+        *view_map = Some(rendered.map.clone());
+        let rows: Vec<&str> = rendered.text.split('\n').collect();
+        let total = rows.len().max(1);
+        let max_scroll = total.saturating_sub(body_rows);
+        if *view_scroll > max_scroll {
+            *view_scroll = max_scroll;
+        }
+        let end = (*view_scroll + body_rows).min(total);
+        let visible = &rows[*view_scroll..end];
+        let body = visible.join("\n");
+        let src_line = crate::markdown::source_line_for_rendered(&rendered.map, *view_scroll);
+        let label = format!("pretty {}/{} ↔ src {}", *view_scroll + 1, total, src_line);
         (body.into_bytes(), label)
     } else {
         let mut highlighter = Highlighter::new(syntax, theme, syntax_set);
@@ -569,6 +633,7 @@ fn render_frame(
             cursor: if gutter_visible { Some(cursor) } else { None },
             line_numbers,
             markdown: false,
+            pretty: false,
         };
         let mut buf: Vec<u8> = Vec::with_capacity(term_w * term_h);
         let stub_input = crate::input::InputKind::Stdin;
@@ -578,7 +643,13 @@ fn render_frame(
 
     // Status bar — shows position, mode tag, current top-pad (when nonzero),
     // and key hints.
-    let mode_tag = if markdown_view { "  [md]" } else { "" };
+    let mode_tag = if markdown_view {
+        "  [md]"
+    } else if pretty_view {
+        "  [json]"
+    } else {
+        ""
+    };
     let gutter_tag = if !gutter_visible { "  no-gutter" } else { "" };
     let wrap_tag = if wrap_on { "  wrap" } else { "" };
     let pad_tag = if top_pad > 0 {
@@ -599,7 +670,7 @@ fn render_frame(
         ""
     };
     let status_label = format!(
-        "  {}  {}  ({}){}{}{}{}{}  j/k g/G ^d/^u m n w +/- q",
+        "  {}  {}  ({}){}{}{}{}{}  j/k g/G ^d/^u m n p w +/- q",
         file_label,
         position_label,
         match line_numbers {
@@ -617,7 +688,7 @@ fn render_frame(
 
     // Keep the body within body_rows visual rows AND within term_w columns so
     // it never overflows past the status bar / scrolls the alt-screen.
-    let body_bytes: Vec<u8> = if wrap_on && !markdown_view {
+    let body_bytes: Vec<u8> = if wrap_on && !markdown_view && !pretty_view {
         // Wrap-on: clip to body_rows visual rows. Each row is normally already
         // <= body_width <= term_w, but when body_width == 0 (gutter wider than
         // the terminal) the printer can't wrap, so also truncate each row to

@@ -96,6 +96,7 @@ pub fn run(
             cursor,
             line_numbers: args.line_numbers,
             markdown: false, // markdown rendering doesn't compose with streaming
+            pretty: false, // prettified JSONL doesn't compose with streaming either
         };
         print(&mut stdout, &input, &contents, &mut hl, &cfg)?;
         stdout.flush()?;
@@ -136,6 +137,7 @@ pub fn run(
                 cursor,
                 line_numbers: args.line_numbers,
                 markdown: false,
+                pretty: false,
             };
             print(&mut stdout, &input, &contents, &mut hl, &cfg)?;
             stdout.flush()?;
@@ -164,6 +166,7 @@ pub fn run(
                 cursor,
                 line_numbers: args.line_numbers,
                 markdown: false,
+                pretty: false,
             };
             print(&mut stdout, &input, &contents, &mut hl, &cfg)?;
             stdout.flush()?;
