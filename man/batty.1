@@ -1,7 +1,7 @@
 .\" Manpage for batty.
 .\" Keep in sync with src/cli.rs, README.md, and CLAUDE.md (see "Keep the
 .\" man page in sync" convention).
-.TH BATTY 1 "2026-06-18" "batty 0.14.0" "User Commands"
+.TH BATTY 1 "2026-07-01" "batty 0.15.0" "User Commands"
 .SH NAME
 batty \- a cat clone with syntax highlighting, git diff markers, and a TUI
 .SH SYNOPSIS
@@ -154,6 +154,13 @@ Disable Markdown rendering. Overrides
 .B markdown = true
 in the config.
 .TP
+.B \-\-no-pretty
+Disable the prettified JSONL view. Overrides
+.B pretty = true
+in the config and the automatic prettify of
+.BR .jsonl " / " .ndjson
+files.
+.TP
 .BR \-n ", " \-\-number
 Show line numbers (equivalent to
 .BR \-\-style=numbers ).
@@ -169,6 +176,14 @@ also disables interactive mode.
 .BR \-p ", " \-\-plain
 Plain output (no decorations, equivalent to
 .BR \-\-style=plain ).
+.TP
+.B \-\-pretty
+Pretty-print JSON Lines: expand each line to multi-line, indented,
+highlighted JSON. Auto-on for
+.BR .jsonl " / " .ndjson ;
+use
+.B \-\-no-pretty
+to opt out, or force it on any file with this flag.
 .TP
 .BR \-A ", " \-\-show-all
 Show non-printable characters.
@@ -258,6 +273,17 @@ is set.
 .B n
 Toggle the gutter.
 .TP
+.B p
+Toggle the prettified JSONL view (raw \(<-> pretty). Available when the file
+is JSONL by extension (
+.BR .jsonl " / " .ndjson )
+or
+.B \-\-pretty
+is set. Mirrors
+.BR m :
+scroll position is preserved via the source-line map. Mutually exclusive with
+the Markdown view.
+.TP
 .B w
 Toggle soft-wrap. Overflow continues on the next visual row with a blank
 line-number gutter; the top row stays a numbered source line. The initial
@@ -291,6 +317,8 @@ tabs             = 2
 top-pad          = 2
 line-numbers     = "relative"
 markdown-on-extension = true
+pretty           = false      # true => prettify every file as JSON Lines
+no-pretty        = false      # true => opt out of .jsonl/.ndjson auto-prettify
 highlight-line   = [10, 20]
 live             = false       # autoreload TUI
 .fi

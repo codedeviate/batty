@@ -14,6 +14,7 @@ A from-scratch Rust clone of [`bat`](https://github.com/sharkdp/bat) — `cat` w
 - **Interactive TUI mode** (`-i`) — vim-style navigation, line by line.
 - **Vim-style relative line numbers** — center distances on a cursor.
 - **Markdown rendering** (`-m`) — render Markdown like `glow`, with a `m` toggle in interactive mode.
+- **JSONL / NDJSON prettifying** — `.jsonl` / `.ndjson` files auto-render as multi-line, indented, highlighted JSON (one object per source line), with a `p` toggle in interactive mode.
 - **Tail / follow mode** (`-f`) — `tail -f` semantics with syntax highlighting.
 - **Live mode** (`--live`) — alt-screen TUI that re-renders on any file change. Same keys as `-i`; cursor + scroll position preserved across reloads.
 - **Colorized `--examples`** — curated, copy-pasteable scenarios for every common flag.
@@ -78,6 +79,7 @@ batty src/main.rs                    # full decorations
 batty -p src/main.rs                 # plain output
 batty -i src/main.rs                 # interactive TUI
 batty -m README.md                   # render Markdown (glow-style)
+batty data.jsonl                     # auto-prettified, highlighted JSON Lines
 batty -f error.log                   # tail -f with highlighting
 batty --line-range 10:30 file.rs     # only lines 10–30
 echo 'fn main() {}' | batty -l rust  # stdin with language hint
@@ -134,6 +136,17 @@ batty --list-themes                  # show all bundled themes
 | `--no-markdown`           | Disable Markdown rendering. Overrides `markdown = true` and `markdown-on-extension = true` in the config.                                                                                                                                                                                                                  |
 
 When `--markdown` is on, the gutter shows the **source-line number** of each top-level block on its first rendered row, with continuation rows blank in the gutter (matching how raw view handles wrapped lines). The grid bar repeats on every row when `--style` includes `grid`. Use `--no-gutter` to strip the gutter and read flush against the left margin. Diff markers (`changes`) and the cursor glyph (`▶`) don't appear in markdown view — block-granular mapping doesn't make them meaningful, and the status bar covers position info in interactive mode. The header prints with the language label `Markdown (rendered)`.
+
+### JSONL / NDJSON prettifying
+
+| Flag            | Description                                                                                                                                                                                       |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--pretty`       | Pretty-print JSON Lines: expand each line to multi-line, indented, highlighted JSON. Auto-on for `.jsonl` / `.ndjson` files; `--pretty` forces it on for any file.                                  |
+| `--no-pretty`    | Disable the prettified view. Overrides `pretty = true` in the config and the automatic prettify of `.jsonl` / `.ndjson` files.                                                                      |
+
+Precedence: `--no-pretty` > `--pretty` > auto-on for `.jsonl` / `.ndjson` > off. Malformed or blank lines pass through verbatim, dimmed. The gutter shows the source-line number on each object's first rendered row, with continuation rows blank (matching the markdown gutter behavior). Indent width is fixed at 2 spaces (not wired to `--tabs`). Mutually exclusive with the markdown view.
+
+> **Behavior change (0.15.0):** `batty file.jsonl` now prettifies by default instead of printing raw one-object-per-line output. Pass `--no-pretty` to get the previous behavior.
 
 ### Interactive mode
 
@@ -202,6 +215,8 @@ line-numbers   = "relative"
 interactive    = true
 markdown       = false       # true → render every file as markdown
 markdown-on-extension = true # true → render only .md / .markdown files
+pretty         = false       # true → prettify every file as JSON Lines
+no-pretty      = false       # true → opt out of the .jsonl/.ndjson auto-prettify
 no-gutter      = false       # true → hide line numbers / changes / grid by default
 follow         = false       # set true to default to tail mode
 live           = false       # set true to default to live mode (alt-screen autoreload)
@@ -255,6 +270,7 @@ Enters raw mode in the alternate screen. A `▶` glyph in the gutter marks the c
 | `PageUp`               | Full page up                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `m`                    | Toggle rendered Markdown view ↔ raw source. Active when the file has a `.md` / `.markdown` / `.mdown` / `.mkd` extension, or when `--markdown` was passed on launch. Status bar shows `[md]` while in rendered mode. The toggle preserves your scroll position: pressing `m` from raw view lands you on the corresponding block in the rendered output, and pressing `m` again returns to the source line of the block you were viewing. The status bar in rendered mode shows `rendered N/M ↔ src K`. |
 | `n`                    | Toggle the gutter (line numbers + cursor glyph) on/off. Initial state follows `--gutter` / `--no-gutter`. Status bar shows `no-gutter` when off.                                                                                                                                                                                                                                                                                                                                                       |
+| `p`                    | Toggle the prettified JSONL view ↔ raw source. Available when the file has a `.jsonl` / `.ndjson` extension, or when `--pretty` was passed on launch. Status bar shows `[json]` while in pretty mode. Mirrors `m`: scroll position is preserved via the source-line map in both directions. Mutually exclusive with the markdown view.                                                                                                                                                              |
 | `w`                    | Toggle soft-wrap on/off (overflow continues on the next row with a blank gutter; status bar shows `wrap`).                                                                                                                                                                                                                                                                                                                                                                                             |
 | `+` / `=`              | Increase `--top-pad` by 1 row (live). Status bar shows `pad=N` when nonzero.                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `-`                    | Decrease `--top-pad` by 1 row (saturates at 0).                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -292,6 +308,15 @@ batty -m README.md
 
 # Mix: render markdown AND open it interactively (m toggles to raw)
 batty -m -i README.md
+
+# JSON Lines auto-prettify (default for .jsonl/.ndjson)
+batty data.jsonl
+
+# Opt out: raw one-object-per-line output
+batty --no-pretty data.jsonl
+
+# Force pretty-printing on a non-.jsonl file
+batty --pretty server.log
 
 # Tail a log file with syntax highlighting
 batty -f error.log
