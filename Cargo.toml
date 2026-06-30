@@ -37,6 +37,7 @@ anstyle-query = "1"
 dirs          = "5"
 anyhow        = "1"
 crossterm = "0.28"
+serde_json = { version = "1", default-features = false, features = ["std", "preserve_order"] }
 toml = { version = "0.8", default-features = false, features = ["parse"] }
 termimad = "0.34"
 unicode-width = "0.1"

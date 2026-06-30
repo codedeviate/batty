@@ -8,6 +8,7 @@ mod git;
 mod highlight;
 mod input;
 mod interactive;
+mod json;
 mod markdown;
 mod pager;
 mod printer;
