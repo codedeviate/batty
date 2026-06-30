@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::Result;
@@ -83,6 +84,76 @@ pub fn render_with_map(
     })
 }
 
+/// A prettified JSONL render with a per-row gutter prefix (source-line numbers
+/// on each object's first row + optional grid bar) baked into `text`.
+pub struct RenderedJsonWithGutter {
+    pub text: String,
+    pub map: Vec<(usize, usize)>,
+    pub gutter_width: usize,
+}
+
+pub fn render_with_gutter(
+    source: &str,
+    line_no_width: usize,
+    show_numbers: bool,
+    show_grid: bool,
+    use_color: bool,
+    highlighter: &mut Highlighter,
+) -> Result<RenderedJsonWithGutter> {
+    let rendered = render_with_map(source, highlighter, use_color)?;
+
+    let gutter_width = (if show_numbers { line_no_width + 1 } else { 0 })
+        + (if show_grid { 2 } else { 0 });
+
+    if gutter_width == 0 {
+        return Ok(RenderedJsonWithGutter {
+            text: rendered.text,
+            map: rendered.map,
+            gutter_width: 0,
+        });
+    }
+
+    let block_starts: HashSet<usize> = rendered.map.iter().map(|(r, _)| *r).collect();
+    let map = rendered.map.clone();
+    let rows: Vec<&str> = rendered.text.split('\n').collect();
+    let last = rows.len().saturating_sub(1);
+    let mut out = String::with_capacity(rendered.text.len() + rows.len() * gutter_width);
+
+    for (idx, row) in rows.iter().enumerate() {
+        if show_numbers {
+            if block_starts.contains(&idx) {
+                let src_line = crate::markdown::source_line_for_rendered(&map, idx);
+                let label = format!("{:>width$}", src_line, width = line_no_width);
+                if use_color {
+                    out.push_str(DIM);
+                    out.push_str(&label);
+                    out.push_str(RESET);
+                } else {
+                    out.push_str(&label);
+                }
+                out.push(' ');
+            } else {
+                for _ in 0..(line_no_width + 1) {
+                    out.push(' ');
+                }
+            }
+        }
+        if show_grid {
+            out.push_str("│ ");
+        }
+        out.push_str(row);
+        if idx < last {
+            out.push('\n');
+        }
+    }
+
+    Ok(RenderedJsonWithGutter {
+        text: out,
+        map,
+        gutter_width,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,5 +213,43 @@ mod tests {
         assert!(is_jsonl_path(&PathBuf::from("A.JSONL")));
         assert!(!is_jsonl_path(&PathBuf::from("a.json")));
         assert!(!is_jsonl_path(&PathBuf::from("a.txt")));
+    }
+
+    #[test]
+    fn render_with_gutter_numbers_block_starts() {
+        let ss = crate::syntax::build_syntax_set().unwrap();
+        let ts = theme_set();
+        let mut hl = json_highlighter(&ss, &ts);
+        let r = render_with_gutter("{\"a\":1}\n{\"b\":2}\n", 4, true, false, false, &mut hl)
+            .unwrap();
+        assert_eq!(r.gutter_width, 5); // line_no_width(4) + 1 separator
+        let starts: std::collections::HashSet<usize> =
+            r.map.iter().map(|(rr, _)| *rr).collect();
+        for (idx, row) in r.text.split('\n').enumerate() {
+            let prefix: String = row.chars().take(5).collect();
+            if starts.contains(&idx) {
+                assert!(
+                    prefix.trim().chars().any(|c| c.is_ascii_digit()),
+                    "block-start row {idx} missing number; prefix={prefix:?}"
+                );
+            } else {
+                assert!(
+                    prefix.trim().is_empty(),
+                    "continuation row {idx} has unexpected number; prefix={prefix:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn render_with_gutter_zero_width_is_passthrough() {
+        let ss = crate::syntax::build_syntax_set().unwrap();
+        let ts = theme_set();
+        let mut hl = json_highlighter(&ss, &ts);
+        let plain = render_with_map("{\"a\":1}\n", &mut hl, false).unwrap().text;
+        let mut hl2 = json_highlighter(&ss, &ts);
+        let r = render_with_gutter("{\"a\":1}\n", 4, false, false, false, &mut hl2).unwrap();
+        assert_eq!(r.gutter_width, 0);
+        assert_eq!(r.text, plain);
     }
 }
